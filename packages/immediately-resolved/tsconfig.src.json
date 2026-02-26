@@ -1,0 +1,10 @@
+{
+  "extends": "@private/config/tsconfig",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "composite": true
+  },
+  "include": ["./src"],
+  "exclude": ["**/*.test.*"]
+}

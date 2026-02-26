@@ -1,0 +1,40 @@
+{
+  "name": "async-utils.js",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "format": "prettier -w .",
+    "fix:lint": "eslint --fix .",
+    "fix": "run-p \"fix:*\"",
+    "check:lint": "eslint .",
+    "check:tsc": "tsgo -b . packages/*",
+    "check": "run-p \"check:*\""
+  },
+  "keywords": [],
+  "author": {
+    "name": "Spencer Young",
+    "url": "https://youngspe.dev/"
+  },
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.0",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "onFail": "error"
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@private/config": "workspace:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "7.0.0-dev.20260224.1",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "npm-run-all2": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

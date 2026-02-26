@@ -1,0 +1,15 @@
+{
+  "name": "immediately-resolved",
+  "version": "0.1.0-dev",
+  "private": true,
+  "main": "./dist/index.js",
+  "exports": "./dist/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "tsgo -b tsconfig.test.json --noCheck && node --enable-source-maps --test \"./dist/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@private/test-utils": "workspace:",
+    "@sinonjs/fake-timers": "catalog:"
+  }
+}

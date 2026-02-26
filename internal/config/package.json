@@ -1,0 +1,7 @@
+{
+  "name": "@private/config",
+  "private": true,
+  "exports": {
+    "./tsconfig": "./tsconfig.common.json"
+  }
+}

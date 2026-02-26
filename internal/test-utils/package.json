@@ -1,0 +1,17 @@
+{
+  "name": "@private/test-utils",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "tsgo -b --noCheck"
+  },
+  "exports": {
+    "./*": "./dist/exports/*.js"
+  },
+  "peerDependencies": {
+    "@sinonjs/fake-timers": "catalog:"
+  },
+  "devDependencies": {
+    "@types/sinonjs__fake-timers": "catalog:"
+  }
+}

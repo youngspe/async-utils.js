@@ -1,0 +1,13 @@
+{
+  "extends": "@private/config/tsconfig",
+  "compilerOptions": {
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+
+    "types": ["node"],
+    "target": "es2024",
+    "lib": ["ES2024"],
+  },
+  "exclude": ["./packages", "./internal"],
+}
