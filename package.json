@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "build": "tsgo -b .",
     "format": "prettier -w .",
     "fix:lint": "eslint --fix .",
     "fix": "run-p \"fix:*\"",

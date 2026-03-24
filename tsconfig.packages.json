@@ -4,6 +4,7 @@
   },
   "include": [],
   "references": [
-    {"path": "./packages/immediately-resolved"}
+    {"path": "./packages/async-scope"},
+    {"path": "./packages/immediately-resolved"},
   ]
 }
