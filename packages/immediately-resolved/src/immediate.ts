@@ -1,79 +1,158 @@
 import { _ImmediateImpl } from './immediate/impl.ts';
-import {
-  type _evaluationKind,
-  type Awaitable,
-  type AwaitedValue,
-  type EvaluationKind,
-  type EvaluationKindOf,
-  type ImmediateInput,
-  type AsAwaitable,
-  type ItemOf,
-  type MustExtend,
-  type EvaluationKindOfRace,
-} from './types.ts';
+import type { HasState, ImmediateState, StateOfAll, StateOfRace, ImmediateStatesOfArray } from './state.ts';
+import type { SoftIntersect, Awaitable, EnforceSubtype, ItemOf, AssumeSubtype } from './types.ts';
 
-export interface _Immediate<out T, out K extends EvaluationKind = EvaluationKind> extends PromiseLike<T> {
-  readonly [_evaluationKind]?: K;
-  value?: T;
-  error?: unknown;
+export type ValueOf<I extends _ImmediateBase<any, any>> = NonNullable<I[typeof _value]>['value'];
 
-  then<A1 = Awaitable<T>, A2 = Awaitable<never>>(
-    onfulfilled?: ((value: T) => AsAwaitable<A1>) | null,
-    onrejected?: ((reason: unknown) => AsAwaitable<A2>) | null,
-  ): Immediate<AwaitedValue<A1 | A2>, K | EvaluationKindOf<A1 | A2>>;
+export type AwaitedValueOf<T> =
+  T extends _Immediate<any, ImmediateState.Initial> ? ValueOf<T>
+  : T extends Promise<infer _T> | Awaitable<infer _T> ? _T
+  : never;
+
+export declare const _value: unique symbol;
+
+interface _ImmediateBase<out T, out S extends ImmediateState.Initial> extends HasState<S> {
+  [_value]?: { value: T };
+}
+
+declare const _rejecting: unique symbol;
+
+export interface _Immediate<T, S extends ImmediateState.Initial = ImmediateState>
+  extends _ImmediateBase<T, S>, PromiseLike<T> {
+  readonly value?: ValueOf<this>;
+  readonly error?: unknown;
+
+  isResolved<T1 = T>(this: _Immediate<T1>): this is Immediate<T1, ImmediateState.Resolved>;
+  isRejecting<T1 = T, S1 extends ImmediateState.Initial = S>(
+    this: _Immediate<T1, S1>,
+  ): this is Immediate.Rejecting<T1, S1>;
+  isRejected<T1 = T, S1 extends ImmediateState.Initial = S>(
+    this: Immediate<T1, S1>,
+  ): this is Immediate<never, S1> & Immediate.Rejected<T1>;
+  isSettled<T1 = T>(this: _Immediate<T1>): this is Immediate<T1, ImmediateState.Settled>;
+
   then<TResult1 = T, TResult2 = never>(
-    onfulfilled?: ((value: T) => Awaitable<TResult1>) | null,
-    onrejected?: ((reason: unknown) => Awaitable<TResult2>) | null,
+    onResolve?: ((value: ValueOf<this>) => ImmediateInput<TResult1, S | ImmediateState.Resolved>) | null,
+    onReject?: ((error: unknown) => ImmediateInput<TResult2, ImmediateState.Rejected>) | null,
+  ): Immediate<TResult1, S>;
+  then<
+    A1 extends Immediate<TResult1, S1> = never,
+    A2 extends Immediate<TResult2, S2> = never,
+    TResult1 = T,
+    TResult2 = never,
+    S1 extends ImmediateState = ImmediateState.For<A1>,
+    S2 extends ImmediateState = ImmediateState.For<A2>,
+  >(
+    onResolve?: ((value: ValueOf<this>) => A1 | ImmediateInput<TResult1, S1>) | null,
+    onReject?: ((error: unknown) => A2 | ImmediateInput<TResult2, S2>) | null,
+  ): Immediate<TResult1 | TResult2, NoInfer<ImmediateState.Then<S1, S1, S2>>>;
+
+  then<TResult1 = T, TResult2 = never>(
+    onResolve?: ((value: ValueOf<this>) => ImmediateInput<TResult1>) | null,
+    onReject?: ((error: unknown) => ImmediateInput<TResult2>) | null,
   ): Immediate<TResult1 | TResult2>;
 
-  catch<A = Awaitable<never>>(
-    onrejected?: ((reason: unknown) => AsAwaitable<A>) | null,
-  ): Immediate<AwaitedValue<A>, K | EvaluationKindOf<A>>;
-  catch<TResult = never>(
-    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
-  ): Immediate<TResult>;
+  catch<TResult2 = never>(
+    onReject?: ((error: unknown) => ImmediateInput<TResult2, ImmediateState.Rejected>) | null,
+  ): Immediate<ValueOf<this> | TResult2, S>;
+  catch<
+    A2 extends Immediate<TResult2, S2> = never,
+    TResult2 = never,
+    S2 extends ImmediateState = ImmediateState.For<A2>,
+  >(
+    onReject?: ((error: unknown) => A2 | ImmediateInput<TResult2, S2>) | null,
+  ): Immediate<ValueOf<this> | TResult2, ImmediateState.Then<S, S, S2>>;
 
-  finally<A extends Awaitable<void>>(
-    onfinally?: (() => A & Awaitable<void>) | null,
-  ): Immediate<T, K | EvaluationKindOf<A>>;
-  finally(onfinally?: () => Awaitable<void>): Immediate<T>;
+  catch<TResult2 = never>(
+    onReject?: ((error: unknown) => ImmediateInput<TResult2>) | null,
+  ): Immediate<ValueOf<this> | TResult2>;
 
-  isResolved<U = T>(this: _Immediate<U, K>): this is ImmediateResolved<U>;
-  isResolved(): this is ImmediateResolved<unknown>;
+  finally(onfinally?: () => ImmediateInput<void, ImmediateState.Resolved>): Immediate<ValueOf<this>, S>;
+  finally<
+    A1 extends ImmediateInput<T, S1>,
+    T = void,
+    S1 extends ImmediateState.Initial = ImmediateState.For<A1>,
+  >(
+    onfinally?: (() => A1 | ImmediateInput<T, S1>) | null,
+  ): Immediate<ValueOf<this>, ImmediateState.Finally<S1, S1>>;
+  finally(onfinally?: () => ImmediateInput<void>): Immediate<ValueOf<this>>;
+  finally(onfinally?: () => unknown): Immediate<ValueOf<this>>;
+}
 
-  isRejected<U extends V, V = T>(this: _Immediate<V, K>): this is ImmediateRejected<U>;
-  isRejected<U>(): this is ImmediateRejected<U>;
+type ImmediateInner<T, S> = ([S] extends [ImmediateState.Rejected] ? Immediate.Rejected<T, S> : unknown)
+  & ([S] extends [ImmediateState.Resolved] ? Immediate.Resolved<T, S> : unknown);
 
-  isComplete<U extends V, V = T>(
-    this: _Immediate<V, K>,
-  ): this is ImmediateResolved<V> | ImmediateRejected<U>;
+export type Immediate<T, S extends ImmediateState.Initial = ImmediateState> =
+  ImmediateInner<T, S> extends infer _I extends _Immediate<T, S> ? _I : _Immediate<T, S>;
 
-  isComplete(): this is ImmediateResolved<unknown> | ImmediateRejected<unknown>;
-  unwrap(): T;
+export type ImmediateInput<T, S extends ImmediateState.Initial = ImmediateState> =
+  | Exclude<T, Promise<any> | PromiseLike<any>>
+  | _Immediate<T, S>
+  | (S extends ImmediateState.Resolved | ImmediateState.Rejected ? never : PromiseLike<T> | Promise<T>);
+
+export namespace Immediate {
+  interface _Rejected<S extends ImmediateState.Rejected> extends _ImmediateBase<never, S> {
+    error: unknown;
+  }
+
+  export type Rejected<_T, S extends ImmediateState.Rejected = ImmediateState.Rejected> = _Immediate<
+    never,
+    S
+  >
+    & _Rejected<S>;
+
+  interface _Resolved<T, S extends ImmediateState.Resolved> extends _ImmediateBase<T, S> {
+    value: T;
+    error?: never;
+  }
+
+  export type Resolved<T, S extends ImmediateState.Resolved = ImmediateState.Resolved> = _Immediate<T, S>
+    & _Resolved<T, S>;
+
+  interface _Rejecting<S extends ImmediateState.Initial> extends _ImmediateBase<never, S> {
+    [_rejecting]: typeof _rejecting;
+  }
+
+  export type Rejecting<_T = never, S extends ImmediateState.Initial = ImmediateState> = Immediate<never, S>
+    & _Rejecting<S>;
 }
 
 type ImmediateInputOfArray<
   T extends readonly unknown[],
-  K extends EvaluationKind = EvaluationKind,
-> = MustExtend<readonly unknown[], { [Idx in keyof T]: ImmediateInput<T[Idx], K> }>;
+  S extends readonly ImmediateState.Initial[] = ImmediateState.Initial[],
+> = AssumeSubtype<
+  readonly ImmediateInput<T[number], S[number]>[],
+  { [Idx in keyof T]: ImmediateInput<T[Idx], S[Idx & keyof S]> }
+>;
 
-type AwaitedValueOfArray<A extends readonly unknown[]> = MustExtend<
-  unknown[],
-  { -readonly [Idx in keyof A]: AwaitedValue<A[Idx]> }
+type ValueOfRace<T extends readonly unknown[], S extends readonly ImmediateState.Initial[]> =
+  [T, S] extends [readonly [infer X, ...any], readonly [ImmediateState.Settled, ...any]] ? X
+  : [T, S] extends (
+    [
+      readonly [infer T1, ...infer T2],
+      readonly [any, ...infer S2 extends readonly ImmediateState.Initial[]],
+    ]
+  ) ?
+    T1 | ValueOfRace<T2, S2>
+  : T[number];
+
+type AwaitedValueOfArray<A extends readonly unknown[]> = AssumeSubtype<
+  readonly AwaitedValueOf<A[number]>[],
+  { readonly [Idx in keyof A]: AwaitedValueOf<A[Idx]> }
 >;
 
 interface MappingObject {
   readonly [k: string]: unknown;
 }
 
-type ImmediateInputOfObject<T extends MappingObject, K extends EvaluationKind> = MustExtend<
-  MappingObject,
-  { [Idx in keyof T as Idx & string]: ImmediateInput<T[Idx], K> }
->;
+type ImmediateInputOfObject<
+  T extends MappingObject,
+  S extends ImmediateState.Initial = ImmediateState,
+> = EnforceSubtype<MappingObject, { [Idx in keyof T as Idx & string]: ImmediateInput<T[Idx], S> }>;
 
-type AwaitedValueOfObject<A extends MappingObject> = MustExtend<
+type AwaitedValueOfObject<A extends MappingObject> = EnforceSubtype<
   MappingObject,
-  { -readonly [Idx in keyof A as Idx & string]: AwaitedValue<A[Idx]> }
+  { -readonly [Idx in keyof A as Idx & string]: AwaitedValueOf<A[Idx]> }
 >;
 
 type PropsOf<T> = T extends { [_ in keyof T]: infer V } ? V : T[keyof T];
@@ -85,102 +164,126 @@ export interface ImmediateConstructor {
 
   prototype: Immediate<unknown>;
 
-  resolve(): ImmediateResolved<void>;
+  resolve(): Immediate<void, ImmediateState.Resolved>;
   resolve<A extends Immediate<any>>(value: A): A;
-  resolve<T, A extends T | ImmediateInput<T, K>, K extends EvaluationKind = EvaluationKindOf<A>>(
+  resolve<T, A extends ImmediateInput<T, S>, S extends ImmediateState.Initial = ImmediateState.For<A>>(
+    value: A | ImmediateInput<T, S>,
+  ): Immediate<T, S>;
+  resolve<T, A extends ImmediateInput<T, S>, S extends ImmediateState.Initial = ImmediateState.For<A>>(
     value: A | ImmediateInput<T>,
-  ): Immediate<T, K>;
-  resolve<T, K extends EvaluationKind = EvaluationKind>(value: ImmediateInput<T, K>): Immediate<T, K>;
+  ): Immediate<T, S>;
+  resolve<T, S extends ImmediateState.Initial = ImmediateState>(
+    value: ImmediateInput<T, S>,
+  ): Immediate<T, S>;
 
-  reject<T = never>(): ImmediateRejected<T>;
-  reject<A extends ImmediateRejected<T>, T = any>(value: A): A;
+  reject<T = never>(): Immediate<T, ImmediateState.Rejected>;
+  reject<A extends Immediate<T, ImmediateState.Rejected>, T = never>(value: A): A;
+  reject<T = never>(value: Immediate<T, ImmediateState.Settled>): Immediate<T, ImmediateState.Rejected>;
+  reject<T = never>(
+    value: Immediate<any, ImmediateState.Resolved | ImmediateState.Rejected>,
+  ): Immediate<T, ImmediateState.Rejected>;
 
-  reject<U, A extends ImmediateInput<U, K>, T = never, K extends EvaluationKind = EvaluationKindOf<A>>(
-    value: A,
-  ): EvaluationKind.Async extends K ? _Immediate<T, K> : ImmediateRejected<T>;
-  reject<T, K extends EvaluationKind = EvaluationKind>(value: ImmediateInput<T, K>): Immediate<T, K>;
+  reject<
+    A extends ImmediateInput<U, S>,
+    U = AwaitedValueOf<A>,
+    T = never,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
+  >(
+    value: A | ImmediateInput<U, S>,
+  ): Immediate<T, ImmediateState.Then<S, ImmediateState.Rejected>>;
+  reject<
+    A extends ImmediateInput<U, S>,
+    U = AwaitedValueOf<A>,
+    T = never,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
+  >(
+    value: A | ImmediateInput<U>,
+  ): Immediate<T, ImmediateState.Then<S, ImmediateState.Rejected>>;
+
+  reject<T, S extends ImmediateState.Initial = ImmediateState>(
+    value: ImmediateInput<T, S>,
+  ): Immediate<T, ImmediateState.Then<S, ImmediateState.Rejected>>;
 
   all<
-    const A extends ImmediateInputOfArray<T, K>,
+    const A extends ImmediateInputOfArray<T, S[]>,
     T extends readonly unknown[] = AwaitedValueOfArray<A>,
-    K extends EvaluationKind = EvaluationKindOf<A[number]>,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
   >(
     values: A,
-  ): Immediate<T, K>;
+  ): Immediate<T, StateOfAll<A>>;
   all<
     I extends Iterable<A>,
-    A extends ImmediateInput<T, K> = ItemOf<I>,
-    T = AwaitedValue<A>,
-    K extends EvaluationKind = EvaluationKindOf<A>,
+    A extends ImmediateInput<T, S> = ItemOf<I>,
+    T = AwaitedValueOf<A>,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
   >(
     values: I,
-  ): Immediate<T[], K>;
+  ): Immediate<T[], S>;
   all<
-    A extends ImmediateInputOfObject<T, K>,
+    A extends ImmediateInputOfObject<T, S>,
     T extends MappingObject = AwaitedValueOfObject<A>,
-    K extends EvaluationKind = EvaluationKindOf<PropsOf<A>>,
+    S extends ImmediateState.Initial = ImmediateState.For<PropsOf<A>>,
   >(
     values: A,
-  ): Immediate<T, K>;
+  ): Immediate<T, S>;
 
   any<
-    const A extends readonly ImmediateInput<T, K>[],
-    T = AwaitedValue<A[number]>,
-    K extends EvaluationKind = EvaluationKindOf<A[number]>,
+    const A extends readonly ImmediateInput<T, S>[],
+    T = AwaitedValueOf<A[number]>,
+    S extends ImmediateState.Initial = ImmediateState.For<A[number]>,
   >(
     values: A,
-  ): Immediate<T, K>;
-  any<A extends ImmediateInput<T, K>, T = AwaitedValue<A>, K extends EvaluationKind = EvaluationKindOf<A>>(
+  ): Immediate<T, S>;
+  any<
+    A extends ImmediateInput<T, S>,
+    T = AwaitedValueOf<A>,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
+  >(
     values: Iterable<A>,
-  ): Immediate<T, K>;
-  any<T, K extends EvaluationKind = EvaluationKind>(
-    values: Iterable<ImmediateInput<T, K>>,
-  ): Immediate<T, K>;
+  ): Immediate<T, S>;
+  any<T, S extends ImmediateState.Initial = ImmediateState>(
+    values: Iterable<ImmediateInput<T, S>>,
+  ): Immediate<T, S>;
 
   race<
-    const A extends ImmediateInput<T, K>[],
-    T = AwaitedValue<A[number]>,
-    K extends EvaluationKind = EvaluationKindOf<A[number]>,
+    const A extends ImmediateInputOfArray<T>,
+    T extends readonly unknown[] = AwaitedValueOfArray<A>,
+    S extends readonly ImmediateState.Initial[] = ImmediateStatesOfArray<A>,
   >(
-    values: A,
-  ): Immediate<T, EvaluationKindOfRace<A>>;
-  race<A extends ImmediateInput<T, K>, T = AwaitedValue<A>, K extends EvaluationKind = EvaluationKindOf<A>>(
+    values: A | ImmediateInputOfArray<T, S>,
+  ): Immediate<ValueOfRace<T, ImmediateStatesOfArray<A>>, StateOfRace<A>>;
+  race<
+    A extends ImmediateInput<T, S>,
+    T = AwaitedValueOf<A>,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
+  >(
     values: Iterable<A>,
-  ): Immediate<T, K>;
-  race<T, K extends EvaluationKind = EvaluationKind>(
-    values: Iterable<ImmediateInput<T, K>>,
-  ): Immediate<T, K>;
+  ): Immediate<T, S>;
+  race<T, S extends ImmediateState.Initial = ImmediateState>(
+    values: Iterable<ImmediateInput<T, S>>,
+  ): Immediate<T, S>;
 
   try<
     A extends ImmediateInput<T, K>,
-    T = AwaitedValue<A>,
+    T = AwaitedValueOf<A>,
     Args extends readonly unknown[] = [],
-    K extends EvaluationKind = EvaluationKind,
+    K extends ImmediateState.Initial = ImmediateState,
   >(
     fn: (...args: Args) => ImmediateInput<T, K>,
     ...args: Args
   ): Immediate<T, K>;
-  try<T, Args extends readonly unknown[] = [], K extends EvaluationKind = EvaluationKind>(
+  try<T, Args extends readonly unknown[] = [], K extends ImmediateState.Initial = ImmediateState>(
     fn: (...args: Args) => ImmediateInput<T, K>,
     ...args: Args
   ): Immediate<T, K>;
 
+  isImmediate<A extends ImmediateInput<T>, T = AwaitedValueOf<A>>(
+    value: A & ImmediateInput<T>,
+  ): value is SoftIntersect<A, Immediate<T>>;
+  isImmediate<T>(value: ImmediateInput<T>): value is Immediate<T>;
+
   readonly NEVER: Immediate<never>;
 }
-
-interface ImmediateSync<T> extends _Immediate<T, EvaluationKind.Sync> {}
-
-export interface ImmediateResolved<T> extends ImmediateSync<T> {
-  value: T;
-  error?: never;
-}
-export interface ImmediateRejected<T> extends ImmediateSync<T> {
-  value?: never;
-  error: unknown;
-}
-
-export type Immediate<T, K extends EvaluationKind = EvaluationKind> =
-  EvaluationKind.Async extends K ? _Immediate<T, K> : ImmediateResolved<T> | ImmediateRejected<T>;
 
 export const Immediate = _ImmediateImpl as unknown as ImmediateConstructor;
 

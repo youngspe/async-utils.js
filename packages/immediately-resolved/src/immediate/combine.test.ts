@@ -5,8 +5,8 @@ import timers from 'node:timers/promises';
 import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 import { TypeAssert } from '@private/test-utils/type-assert';
 
-import { Immediate, type EvaluationKind } from 'immediately-resolved';
-import { verifyComplete, verifyNotComplete } from '../util.test.ts';
+import { Immediate, type ImmediateState } from 'immediately-resolved';
+import { verifySettled, verifyNotComplete } from '../util.test.ts';
 
 useFakeTimers();
 
@@ -16,7 +16,7 @@ suite('Immediate', () => {
       test('with an empty array', async () => {
         const target = Immediate.all([]);
 
-        verifyComplete(target);
+        verifySettled(target);
         assert(!target.isRejected());
         assert.deepEqual(target.value, []);
 
@@ -27,7 +27,7 @@ suite('Immediate', () => {
       test('with an array of non-promise-like values', async () => {
         const target = Immediate.all([1, 2, 3]);
 
-        verifyComplete(target);
+        verifySettled(target);
         assert(!target.isRejected());
         assert.deepEqual(target.value, [1, 2, 3]);
 
@@ -38,7 +38,7 @@ suite('Immediate', () => {
       test('with an empty object', async () => {
         const target = Immediate.all({});
 
-        verifyComplete(target);
+        verifySettled(target);
         assert(!target.isRejected());
         assert.deepEqual(target.value, {});
 
@@ -49,7 +49,7 @@ suite('Immediate', () => {
       test('with an object of non-promise-like values', async () => {
         const target = Immediate.all({ a: 1, b: 2, c: 3 } as const);
 
-        verifyComplete(target);
+        verifySettled(target);
         assert(!target.isRejected());
         assert.deepEqual(target.value, { a: 1, b: 2, c: 3 });
 
@@ -103,7 +103,7 @@ suite('Immediate', () => {
         5,
       ]);
 
-      TypeAssert(_ => _.Variable({ target }).Not.Extends<Immediate<any, EvaluationKind.Sync>>);
+      TypeAssert(_ => _.Variable({ target }).Not.Extends<Immediate<any, ImmediateState.Settled>>);
 
       assert(target.isResolved());
 
@@ -114,26 +114,26 @@ suite('Immediate', () => {
   suite('.race', () => {
     test('resolves with the first resolved promise', async () => {
       const target = Immediate.race([
-        timers.setTimeout(50, 1),
-        timers.setTimeout(30, 2),
-        timers.setTimeout(70, 3),
+        timers.setTimeout(50, 1 as const),
+        timers.setTimeout(30, 2 as const),
+        timers.setTimeout(70, 3 as const),
       ]);
 
-      verifyNotComplete(target);
+      verifyNotComplete<1 | 2 | 3>(target);
 
       assert.equal(await target, 2);
     });
 
     test('resolves immediately with the first non-promise', async () => {
       const target = Immediate.race([
-        timers.setTimeout(50, 1),
-        timers.setTimeout(30, 2),
+        timers.setTimeout(50, 1 as const),
+        timers.setTimeout(30, 2 as const),
         3,
-        timers.setTimeout(70, 4),
+        timers.setTimeout(70, 4 as const),
         5,
       ]);
 
-      verifyComplete(target);
+      verifySettled<1 | 2 | 3>(target);
 
       assert.equal(await target, 3);
     });

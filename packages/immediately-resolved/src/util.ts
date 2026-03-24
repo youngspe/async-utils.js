@@ -1,6 +1,11 @@
-import type { Awaitable } from './types.ts';
+import type { AwaitedValueOf } from './immediate.ts';
+import type { Awaitable, SoftIntersect } from './types.ts';
 
-export function isPromiseLike<T>(value: Awaitable<T>): value is PromiseLike<T> {
+export function isPromiseLike<A extends Awaitable<T>, T = AwaitedValueOf<A>>(
+  value: A | Awaitable<T>,
+): value is PromiseLike<T>;
+export function isPromiseLike<T>(value: Awaitable<T>): value is PromiseLike<T>;
+export function isPromiseLike<T>(value: Awaitable<T>) {
   return (
     value instanceof Promise
     || (value !== null

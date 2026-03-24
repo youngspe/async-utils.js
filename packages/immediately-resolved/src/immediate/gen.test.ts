@@ -55,7 +55,7 @@ suite('immediate', () => {
         return x + 7;
       });
 
-      assert(!out.isComplete());
+      assert(!out.isSettled());
       assert(!out.isResolved());
       assert(!out.isRejected());
       const x: number = await out;
