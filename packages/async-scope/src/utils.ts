@@ -1,13 +1,10 @@
-import { ControlFlowLike, ControlFlow } from './controlFlow.ts';
-import { OrNever } from './types.ts';
-import type { Awaitable, IfExactOptionalPropertiesEnabled } from './types.ts';
+import { type ControlFlowLike, ControlFlow } from './controlFlow.ts';
+import { type OrNever } from './types.ts';
+import type { Awaitable, IfExactOptionalPropertiesEnabled, UnlessNeverElse } from './types.ts';
 
 type ExtractIterable<I> = I extends Iterable<infer X, infer Y, infer Z> ? Iterable<X, Y, Z> : never;
 
-type AsIterable<I> =
-  Iterable<unknown, unknown, never> extends I ? ExtractIterable<I>
-  : [I] extends [Iterable<unknown, unknown, never>] ? ExtractIterable<I>
-  : Iterable<never, never, any>;
+type AsIterable<I> = UnlessNeverElse<ExtractIterable<I>, Iterable<unknown, unknown, any>>;
 
 export function isIterable<T>(value: T | AsIterable<T> | null | undefined): value is AsIterable<T>;
 export function isIterable(value: any) {
@@ -26,14 +23,13 @@ type ExtractArray<I> =
   : I extends ReadonlyArray<infer X> ? readonly X[]
   : never;
 
-type AsArray<I> =
-  never[] extends I ? ExtractArray<I>
-  : [I] extends [readonly any[]] ? ExtractArray<I>
-  : unknown[];
+type AsArray<I> = UnlessNeverElse<ExtractArray<I>, unknown[]>;
 
-export const isArray = Array.isArray.bind(Array) as <I>(
-  value: I | AsArray<I> | null | undefined,
-) => value is AsArray<I>;
+interface IsArrayFunction {
+  <I>(value: I | AsArray<I> | null | undefined): value is AsArray<I>;
+}
+
+export const isArray = Array.isArray.bind(Array) as IsArrayFunction;
 
 export async function tryReducePromises<
   T,
@@ -115,9 +111,13 @@ type AwaitableArray<T extends readonly any[]> = { readonly [K in keyof T]: Await
  */
 export async function joinPromisesAggregatingErrors<T extends any[]>(
   promises: AwaitableArray<T>,
-): Promise<T>;
-export async function joinPromisesAggregatingErrors<T>(promises: Iterable<Awaitable<T>>): Promise<T[]>;
-export async function joinPromisesAggregatingErrors<T>(promises: Iterable<Awaitable<T>>): Promise<T[]> {
+): Promise<Result<T, Set<unknown>>>;
+export async function joinPromisesAggregatingErrors<T>(
+  promises: Iterable<Awaitable<T>>,
+): Promise<Result<T[], Set<unknown>>>;
+export async function joinPromisesAggregatingErrors<T>(
+  promises: Iterable<Awaitable<T>>,
+): Promise<Result<T[], Set<unknown>>> {
   const ctrl = await reducePromises(
     promises,
     (acc: Result<T[], Set<unknown>>, item) => {
@@ -139,11 +139,15 @@ export async function joinPromisesAggregatingErrors<T>(promises: Iterable<Awaita
     { ok: [] },
   );
 
-  if (ctrl.ok) return ctrl.ok;
+  return ctrl;
+}
 
-  if (ctrl.err.size > 1) throw new AggregateError(ctrl.err);
+export class Todo extends Error {
+  static {
+    this.prototype.name = 'TODO';
+  }
+}
 
-  const [err] = ctrl.err;
-
-  throw err;
+export function TODO(msg?: string): never {
+  throw new Todo(msg);
 }
