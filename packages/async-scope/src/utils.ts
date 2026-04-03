@@ -1,153 +1,93 @@
-import { type ControlFlowLike, ControlFlow } from './controlFlow.ts';
-import { type OrNever } from './types.ts';
-import type { Awaitable, IfExactOptionalPropertiesEnabled, UnlessNeverElse } from './types.ts';
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import type { Awaitable, UnlessNeverElse } from './types.ts';
 
+/**
+ * Gets the base {@link Iterable} types for each constituent of union type `I` that is an iterable.
+ * Discards all non-iterable constituents.
+ *
+ * This is a helper for {@linkcode AsIterable}.
+ */
 type ExtractIterable<I> = I extends Iterable<infer X, infer Y, infer Z> ? Iterable<X, Y, Z> : never;
 
+/**
+ * If `I` or any of its union constituents extend {@link Iterable}, evaluates to the base iterable
+ * type of `I` or its constituents.
+ * Otherwise, evaluates to {@linkcode Iterable|Iterable<unknown, unknown, any>}.
+ *
+ * This is used in the predicate type of {@linkcode isIterable} to narrow a type down to
+ * {@link Iterable} while preserving the most likely `yield`, `return`, and `next` types.
+ */
 type AsIterable<I> = UnlessNeverElse<ExtractIterable<I>, Iterable<unknown, unknown, any>>;
 
 export function isIterable<T>(value: T | AsIterable<T> | null | undefined): value is AsIterable<T>;
 export function isIterable(value: any) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   return typeof value?.[Symbol.iterator] === 'function';
 }
 
 export function isPromiseLike<T>(value: Awaitable<T> | null | undefined): value is PromiseLike<T>;
 export function isPromiseLike(value: any) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   return typeof value?.then === 'function';
 }
 
+/** @returns `true` if `value` has a {@linkcode Symbol.dispose} method. */
+export function isDisposable(value: unknown): value is Disposable;
+export function isDisposable(value: any) {
+  return typeof value?.[Symbol.dispose] === 'function';
+}
+
+/** @returns `true` if `value` has a {@linkcode Symbol.asyncDispose} method. */
+export function isAsyncDisposable(value: unknown): value is AsyncDisposable;
+export function isAsyncDisposable(value: any) {
+  return typeof value?.[Symbol.asyncDispose] === 'function';
+}
+
+/**
+ * Gets the base {@link Array} types for each constituent of union type `I` that is an array.
+ * Discards all non-array constituents.
+ *
+ * This is a helper for {@linkcode AsArray}.
+ */
 type ExtractArray<I> =
   I extends Array<infer X> ? X[]
   : I extends ReadonlyArray<infer X> ? readonly X[]
   : never;
 
+/**
+ * If `I` or any of its union constituents extend {@link Array} or {@link ReadonlyArray}, evaluates
+ * to the base array type of `I` or its constituents.
+ * Otherwise, evaluates to `unknown[]`.
+ *
+ * This is used in the predicate type of {@linkcode isArray} to narrow a type down to {@link Array}
+ * while preserving the most likely element type.
+ */
 type AsArray<I> = UnlessNeverElse<ExtractArray<I>, unknown[]>;
 
 interface IsArrayFunction {
   <I>(value: I | AsArray<I> | null | undefined): value is AsArray<I>;
 }
 
+/**
+ * @returns `true` if {@link value} is an array.
+ *
+ * @remarks
+ * This is an alias for {@link Array.isArray} but the types work out better for readonly arrays.
+ */
 export const isArray = Array.isArray.bind(Array) as IsArrayFunction;
 
-export async function tryReducePromises<
-  T,
-  Cf extends ControlFlowLike<Awaitable<B>, Awaitable<C>>,
-  B = Awaited<ControlFlow.BreakValue<Cf>>,
-  C = Awaited<ControlFlow.ContinueValue<Cf>>,
->(
-  promises: Iterable<Awaitable<T>>,
-  combine: (
-    acc: C,
-    item: PromiseSettledResult<T>,
-    index: number,
-  ) => Awaitable<Cf | ControlFlowLike<Awaitable<B>, Awaitable<C>>>,
-  init: Awaitable<C>,
-): Promise<ControlFlow<B, C>> {
-  const resultPromises = Array.from(
-    promises,
-    (promise): Awaitable<PromiseSettledResult<T>> =>
-      isPromiseLike(promise) ?
-        promise.then(
-          value => ({ status: 'fulfilled', value }),
-          (reason: unknown) => ({ status: 'rejected', reason }),
-        )
-      : { status: 'fulfilled', value: promise },
-  );
-
-  let i = 0;
-
-  let acc: C = await init;
-
-  for (const resultPromise of resultPromises) {
-    const index = i++;
-    const result = await resultPromise;
-
-    const ctrl = ControlFlow.from(await combine(acc, result, index));
-
-    if ('break' in ctrl) return { break: await ctrl.break };
-    acc = await ctrl.continue;
-  }
-
-  return { continue: acc };
-}
-
-export async function reducePromises<T, A>(
-  promises: Iterable<Awaitable<T>>,
-  combine: (acc: A, item: PromiseSettledResult<T>, index: number) => Awaitable<A>,
-  init: Awaitable<A>,
-): Promise<A> {
-  return (await tryReducePromises(promises, (...args) => ({ continue: combine(...args) }), init)).continue;
-}
-
-interface _ResultBase<out T, out E> {
-  readonly ok?: T;
-  readonly err?: E;
-}
-
-type ResultBase<T, E> = IfExactOptionalPropertiesEnabled<_ResultBase<T, E>, {}>;
-
-namespace Result {
-  export interface OkObject<out T> extends ResultBase<T, never> {
-    readonly ok: T;
-  }
-  export interface ErrObject<out E> extends ResultBase<never, E> {
-    readonly err: E;
-  }
-
-  export type Ok<T> = OkObject<T> & OrNever<T>;
-  export type Err<E = unknown> = ErrObject<E> & OrNever<E>;
-}
-
-type Result<T, E = unknown> = Result.Ok<T> | Result.Err<E>;
-
-type AwaitableArray<T extends readonly any[]> = { readonly [K in keyof T]: Awaitable<T[K]> };
-
-/**
- * Like `Promise.allSettled()`, this waits until all promises have settled. Like `Promise.all()`, this rejects if any promise rejects.
- * @param promises
- * @returns
- */
-export async function joinPromisesAggregatingErrors<T extends any[]>(
-  promises: AwaitableArray<T>,
-): Promise<Result<T, Set<unknown>>>;
-export async function joinPromisesAggregatingErrors<T>(
-  promises: Iterable<Awaitable<T>>,
-): Promise<Result<T[], Set<unknown>>>;
-export async function joinPromisesAggregatingErrors<T>(
-  promises: Iterable<Awaitable<T>>,
-): Promise<Result<T[], Set<unknown>>> {
-  const ctrl = await reducePromises(
-    promises,
-    (acc: Result<T[], Set<unknown>>, item) => {
-      if (item.status === 'fulfilled') {
-        if (acc.ok) {
-          acc.ok.push(item.value);
-        }
-
-        return acc;
-      }
-
-      if (acc.ok) {
-        acc = { err: new Set() };
-      }
-
-      acc.err.add(item.reason);
-      return acc;
-    },
-    { ok: [] },
-  );
-
-  return ctrl;
-}
-
+/** Throw this when something isn't implemented yet. */
 export class Todo extends Error {
   static {
     this.prototype.name = 'TODO';
   }
 }
 
-export function TODO(msg?: string): never {
+/**
+ * Shorthand for <code>throw new {@linkcode Todo()}</code>, but can be used in expression position.
+ *
+ * @example
+ *
+ * return newFeatureEnabled ? TODO('new feature implementation') : oldImplementation();
+ */
+export function TODO<T = never>(msg?: string): T {
   throw new Todo(msg);
 }

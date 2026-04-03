@@ -1,18 +1,21 @@
-import { Token } from '../token.js';
-import { Scope, STATIC_SCOPE, type ToScope } from '../scope.js';
+import { Token } from '../token.ts';
+import { Scope, STATIC_SCOPE, type ToScope, StandardScope } from '../scope.ts';
 import { isArray, TODO } from '../utils.ts';
-import { StandardScope } from './standard.ts';
+import { ScopedResources } from '../scopedResource.ts';
 
-export function scopeFrom(src: ToScope): Scope {
+export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Scope {
   if (!src) return STATIC_SCOPE;
   if (src instanceof Scope) return src;
-  if (src instanceof Token) return new StandardScope(src);
-  if (src instanceof AbortSignal) return new StandardScope(TODO('Token from AbortSignal'));
+  if (src instanceof Token) return new StandardScope({ token: src, onError });
+  if (src instanceof AbortSignal) {
+    return new StandardScope({ token: Token.fromAbortSignal(src, { onError }), onError });
+  }
 
-  let hasNonScopeBoundSource = false;
+  let hasNonScopeToken = false;
   const scopes = new Set<Scope>();
   const tokens = new Set<Token>();
   const abortSignals = new Set<AbortSignal>();
+  const resources = new Set<ScopedResources>();
 
   function flatten(src: ToScope): Token | undefined {
     if (!src) return;
@@ -25,11 +28,15 @@ export function scopeFrom(src: ToScope): Scope {
         tokens.add(src.token);
       }
 
+      if (!src.resources.isEmpty) {
+        resources.add(src.resources);
+      }
+
       return;
     }
 
     if (src instanceof Token) {
-      hasNonScopeBoundSource = true;
+      hasNonScopeToken = true;
       if (src.isCancelled) return src;
       if (!src.isDefused) {
         tokens.add(src);
@@ -38,7 +45,7 @@ export function scopeFrom(src: ToScope): Scope {
     }
 
     if (src instanceof AbortSignal) {
-      hasNonScopeBoundSource = true;
+      hasNonScopeToken = true;
       if (src.aborted) return TODO('pre-cancelled Token');
 
       abortSignals.add(src);
@@ -53,12 +60,12 @@ export function scopeFrom(src: ToScope): Scope {
       return;
     }
 
-    return flatten(src.scope ?? src.signal);
+    return flatten(src.scope) || flatten(src.token) || flatten(src.signal);
   }
 
   const cancelled = flatten(src);
 
-  if (!hasNonScopeBoundSource && scopes.size <= 1) {
+  if (!hasNonScopeToken && scopes.size <= 1) {
     // If only one scope was passed in with no other tokens, we can return the
     // scope directly.
     //
@@ -66,10 +73,10 @@ export function scopeFrom(src: ToScope): Scope {
     //
     const [scope] = scopes;
 
-    if (!cancelled || scope?.token === cancelled) return scope ?? TODO('static/forever scope');
+    if (!cancelled || scope?.token === cancelled) return scope ?? Scope.static;
   }
 
-  if (cancelled) return new StandardScope(cancelled);
+  if (cancelled) return new StandardScope({ token: cancelled });
 
   let [signal] = abortSignals;
 
@@ -78,8 +85,12 @@ export function scopeFrom(src: ToScope): Scope {
   }
 
   if (signal) {
-    tokens.add(TODO('Token from AbortSignal'));
+    tokens.add(Token.fromAbortSignal(signal));
   }
 
-  return new StandardScope(Token.combine(tokens));
+  return new StandardScope({
+    token: Token.combine(tokens),
+    resources: ScopedResources.combine(resources),
+    onError,
+  });
 }

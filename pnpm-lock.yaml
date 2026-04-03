@@ -90,6 +90,15 @@ importers:
         specifier: 'catalog:'
         version: 15.0.1
 
+  packages/async-scope:
+    devDependencies:
+      '@private/test-utils':
+        specifier: 'workspace:'
+        version: link:../../internal/test-utils
+      '@sinonjs/fake-timers':
+        specifier: 'catalog:'
+        version: 15.1.0
+
   packages/immediately-resolved:
     devDependencies:
       '@private/test-utils':

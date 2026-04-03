@@ -1,6 +1,15 @@
 /**
  * A value that yields `T` when awaited. Useful for functions that take either the value itself or a
  * promise that yields it.
+ *
+ * @template T The type of the value returned by `value` when awaited.
+ *
+ * @example
+ * function asyncMultiply(lhs: Awaitable<number>, rhs: Awaitable<number>) {
+ *   const [l, r] = await Promise.all([lhs, rhs]);
+ *   return l * r;
+ * }
+ *
  */
 export type Awaitable<T> = T | Promise<T> | PromiseLike<T>;
 
@@ -66,3 +75,48 @@ export type OrNever<T, U = unknown> = IfNever<T, never, U>;
 
 /** Evaluates to `T`, unless `T` is never, in which case it evaluates to `Else`. */
 export type UnlessNeverElse<T, Else> = [T] extends [never] ? Else : T;
+
+type _OptionalUndefinedParams<A extends any[], R extends any[]> =
+  { [K in keyof R]: undefined } extends R ?
+    A extends [...infer L, ...R] ?
+      [...L, ...Partial<R>]
+    : A
+  : R extends [any, ...infer Rest] ? _OptionalUndefinedParams<A, Rest>
+  : A;
+
+export type OptionalUndefinedParams<A extends any[]> = _OptionalUndefinedParams<A, A>;
+
+type SimplifyObject<T> = { [K in keyof T]: T[K] };
+
+/**
+ * Makes properties of `T` that may be `undefined` optional.
+ * Useful for a params/options object for a function when a value might not be required depending
+ * on the type parameters.
+ *
+ * @example
+ *
+ * interface MyParams<T, U> {
+ *   items: T[]
+ *   // This property may be undefined if a `T` is already a valid `U`, but
+ *   // as-is you'll still need to include `transform: undefined` in your options.
+ *   transform: ((value: T) => U) | (T extends U ? undefined : never);
+ * }
+ *
+ * function myMap<T, U = T>({
+ *   items,
+ *   transform,
+ * }: OptionalUndefinedProps<MyParams<T, U>>): U[] {
+ *   return transform ? items.map(transform) : items as (T & U)[]
+ * }
+ *
+ * const strings = myMap({
+ *   items: [1, 2, 3],
+ *   transform: String,
+ * }); // ['1', '2', '3']
+ *
+ * // `transform` is not required because `T` and `U` are both `number`.
+ * const unchanged = myMap({ items: [1, 2, 3] }); // [1, 2, 3]
+ */
+export type OptionalUndefinedProps<T> = SimplifyObject<
+  Partial<T> & { [K in keyof T as undefined extends T[K] ? never : K]: T[K] }
+>;

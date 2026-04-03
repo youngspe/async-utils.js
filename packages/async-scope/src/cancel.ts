@@ -1,18 +1,18 @@
 import { CancellationError } from './error.ts';
+import { Subscription } from './events/sub.js';
+import { whenAllSettled } from './join.ts';
+import type { ToScope } from './scope.ts';
 import type Symbols from './symbols.ts';
 import type { Awaitable, Falsy } from './types.ts';
-import { isArray, joinPromisesAggregatingErrors } from './utils.ts';
+import { isArray } from './utils.ts';
 
-export interface CancellableParentHandle {
-  remove(key: object): void;
-  isValid(key: object): boolean;
-}
+export interface CancellableParent {}
 
 export interface Cancellable {
   cancel(reason: Error): Awaitable<void>;
   /** Return false to prevent the parent from adding this cancellable. */
-  [Symbols.cancellableAdded]?(handle: CancellableParentHandle): boolean | void;
-  [Symbols.cancellableRemoved]?(handle: CancellableParentHandle): void;
+  [Symbols.cancellableAdded]?(key: CancellableParent, sub: Subscription): boolean | void;
+  [Symbols.cancellableRemoved]?(key: CancellableParent): void;
 }
 
 export type CancellableLike =
@@ -22,7 +22,7 @@ export type CancellableLike =
   | AsyncDisposable
   | readonly CancellableLike[];
 
-export type CancellationListener = (reason: unknown) => Awaitable<void>;
+export type CancellationListener = (reason: Error) => Awaitable<void>;
 
 export async function cancelObject(target: CancellableOrDisposable, reason: Error) {
   if (typeof target.cancel === 'function') {
@@ -42,15 +42,11 @@ export async function cancelObject(target: CancellableOrDisposable, reason: Erro
 }
 
 export function cancel(target: CancellableLike, reason?: Error): Promise<void>;
-export async function cancel(
-  target: CancellableLike,
-  reason: Error = new CancellationError(),
-): Promise<void> {
-  if (!target) return;
+export function cancel(target: CancellableLike, reason: Error = new CancellationError()): Promise<void> {
+  if (!target) return Promise.resolve();
 
   if (isArray(target)) {
-    await joinPromisesAggregatingErrors(target.map(t => cancel(t, reason)));
-    return;
+    return whenAllSettled(target, t => cancel(t, reason));
   }
 
   return cancelObject(target, reason);
@@ -58,3 +54,9 @@ export async function cancel(
 
 export interface CancellableOrDisposable
   extends Partial<Cancellable>, Partial<Disposable>, Partial<AsyncDisposable> {}
+
+export interface CancellableOptions {
+  scope?: ToScope;
+  token?: ToScope;
+  signal?: AbortSignal | undefined;
+}

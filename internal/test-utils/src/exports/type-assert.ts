@@ -3,7 +3,7 @@ type _Validity<V> = V | readonly _Validity<V>[] | { [key: string]: _Validity<V> 
 export type Valid = _Validity<void>;
 export type Validity = _Validity<void | _Invalid<any>>;
 export type IfValid<V extends Validity, T> = [V] extends [Valid] ? T : V;
-export type IfSatisfies<X, A extends TypeAssertion<X>, T> = IfValid<Satisfies<X, A>, T>;
+export type IfSatisfies<X, A extends MinTypeAssertion<X>, T> = IfValid<Satisfies<X, A>, T>;
 
 declare class _Invalid<_Msg> {
   private _;
@@ -30,12 +30,15 @@ export type Invalid<Msg> =
   Msg extends [...infer _M] ? _Invalid<[...FlattenMessage<[..._M]>]> : _Invalid<Msg>;
 
 interface TypeAssertContext {
-  Satisfies<T, A extends TypeAssertion<T>>(this: void): Satisfies<T, A>;
-  <const T>(this: void, value: T): CommonAssertions<T, UnchangedTypeAssertion>;
+  Satisfies<T, A extends MinTypeAssertion<T>>(this: void): Satisfies<T, A>;
+  <const T>(this: void, value: T): CommonAssertions<T>;
   Variable<const V extends { [k: string]: any }>(this: void, value: V): CommonAssertions<V, ForVariable>;
 }
 
-interface TypeAssertWithKnownTypeFunction<T, F extends TypeAssertionTransform = UnchangedTypeAssertion> {
+interface TypeAssertWithKnownTypeFunction<
+  T,
+  F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
+> {
   (_: (assert: CommonAssertions<T, F>) => Valid): this;
 }
 
@@ -74,14 +77,10 @@ TypeAssert.Type = TypeAssert as TypeAssertTypeFunction;
 TypeAssert.Value = TypeAssert as TypeAssertValueFunction;
 TypeAssert.Variable = TypeAssert as unknown as TypeAssertVariableFunction;
 
-TypeAssert.Function = <A extends TypeAssertion>() => ({
+TypeAssert.Function = <A extends MinTypeAssertion<Base>, Base = BaseTarget<A>>() => ({
   calls: <Args extends readonly unknown[] = [], Ret = void>(
-    body: <T extends BaseTarget<A>>(value: ImpliedIfValid<T, A>, ...args: Args) => Ret,
-  ) =>
-    body as <T extends BaseTarget<A>>(
-      value: IfSatisfies<T, A, ImpliedIfInvalid<T, A>>,
-      ...args: Args
-    ) => Ret,
+    body: <T extends Base>(value: ImpliedIfValid<T, A>, ...args: Args) => Ret,
+  ) => body as <T extends Base>(value: IfSatisfies<T, A, ImpliedIfInvalid<T, A>>, ...args: Args) => Ret,
   with: <T, Args extends readonly unknown[] = [], Ret = void>(
     value: T,
     body: (value: ImpliedIfValid<T, A>, ...args: Args) => Ret,
@@ -97,21 +96,28 @@ type Primitive<T> = Extract<PropertyKey, T> extends never ? T : _Primitive<T>;
 
 type KeysOf<T> = keyof { [K in keyof Exclude<T, never> as Primitive<K>]: any };
 type PropsOf<T> = T[KeysOf<T>];
-type TargetSatisfies<A1 extends MinimalTypeAssertion, A2 extends MinimalTypeAssertion> = _Satisfies<
+type TargetSatisfies<A1 extends MinTypeAssertion, A2 extends MinTypeAssertion> = _Satisfies<
   Target<A1>,
   A2,
   Name<A1>
 >;
 
-export interface All<A extends readonly TypeAssertion[]> extends TypeAssertion<BaseTarget<A[number]>> {
+export interface All<A extends readonly MinTypeAssertion[]> extends TypeAssertion<BaseTarget<A[number]>> {
   assert: { [K in keyof A]: TargetSatisfies<this, A[K]> };
 }
 
-export interface Extends<Super> extends TypeAssertion {
+export interface Extends<Super> extends TypeAssertion<any> {
   assert: Target<this> extends Super ? void : Invalid<['expected', Name<this>, 'to extend', Super]>;
-  invert: Target<this> extends Super ? Invalid<['expected', Name<this>, 'not to extend', Super]> : void;
+  invert: NotExtends<Super>;
 
-  decides: [Super];
+  implications: _Implications & { decides: [Super] };
+}
+
+export interface NotExtends<Super> extends TypeAssertion<any> {
+  assert: Target<this> extends Super ? Invalid<['expected', Name<this>, 'not to extend', Super]> : void;
+  invert: Extends<Super>;
+
+  implications: _Implications & { decidesNot: [Super] };
 }
 
 type _SameType<A, B, _True = true, _False = false> =
@@ -127,14 +133,26 @@ export type SameType<A, B> = _SameType<
 type _Subtype<Super, Sub extends Super> = Sub;
 
 type AssumeSubtype<Super, Sub> = _Subtype<Super, Sub extends infer _Sub extends Super ? Sub & _Sub : never>;
+// type AssumeSubtype<Super, Sub> = _Subtype<Super, Extract<Sub, Super>>;
 type EnforceSubtype<Super, Sub extends Super> = AssumeSubtype<Super, Sub>;
 
-type BaseTarget<A extends TypeFunctionBase<never>> = A extends TypeFunctionBase<infer B> ? B : never;
+declare const _baseTargetHelper: unique symbol;
 
-type Target<A extends TypeFunctionBase<never>> = EnforceSubtype<
-  BaseTarget<A>,
-  AssumeSubtype<BaseTarget<A>, A[typeof _target]>
->;
+interface _BaseTargetHelper {
+  [_baseTargetHelper]: this extends TypeFunctionBase<infer B> ? B : never;
+}
+
+type BaseTarget<A extends TypeFunctionBase<never>> = (A & _BaseTargetHelper)[typeof _baseTargetHelper];
+
+type Target<A extends TypeFunctionBase<Base>, Base = BaseTarget<A>> = (A
+  & _TargetHelper<Base>)[typeof _targetHelper];
+
+declare const _targetHelper: unique symbol;
+
+interface _TargetHelper<Base> {
+  [_target]?: unknown;
+  [_targetHelper]: typeof _target extends keyof this ? Extract<this[typeof _target], Base> : Base;
+}
 
 type ApplyTypeFunction<F extends TypeFunction<K, X>, K extends keyof F, X> = EnforceSubtype<
   F[K],
@@ -151,7 +169,8 @@ interface _Named<S> {
   [_targetName]: S;
 }
 
-type Name<A extends MinimalTypeAssertion> = A extends _Named<infer S> ? S : Target<A>;
+type Name<A extends MinTypeAssertion<Base>, Base = BaseTarget<A>> =
+  A extends _Named<infer S> ? S : Target<A, Base>;
 
 declare const _target: unique symbol;
 declare const _targetName: unique symbol;
@@ -224,7 +243,7 @@ type ImplicationItem =
 
 interface ImplicationsInput<in Base> {}
 
-interface Implications<in Base> extends TypeFunctionBase<Base> {
+interface _Implications {
   /** Target extends if valid */
   readonly implies: readonly unknown[];
   /** Target does not extend if not valid */
@@ -239,12 +258,20 @@ interface Implications<in Base> extends TypeFunctionBase<Base> {
   readonly decidesNot: readonly unknown[];
 }
 
+interface Implications<in Base = never> extends TypeFunctionBase<Base>, _Implications {}
+
+type Implication<
+  This extends TypeFunctionBase<never>,
+  T extends MinTypeAssertion,
+  K extends keyof _Implications,
+> = AssumeSubtype<readonly unknown[], (T & { [_target]: Target<This> })[K & keyof T]>;
+
 interface ImpliesType<in T extends readonly unknown[]> {}
 
-export interface TypeAssertion<in Base = any> extends TypeFunction<'assert', Base, Validity> {
+export interface TypeAssertion<in Base = never>
+  extends TypeFunction<'assert', Base, Validity>, Implications<Base> {
   readonly [_target]: unknown;
   readonly assert: Validity | Invalid<['missing assertion']>;
-  readonly implications: Implications<Base>;
 }
 
 interface For<T, Name = T> {
@@ -252,63 +279,68 @@ interface For<T, Name = T> {
   readonly [_targetName]: Name;
 }
 
-interface MinimalTypeAssertion<in B = never> extends TypeFunctionBase<B> {
-  assert: Validity;
+interface MinTypeAssertion<in B = never> extends TypeFunctionBase<B> {
+  readonly assert: Validity;
 }
 
-type MinimalTypeAssertions<B = never> =
-  | MinimalTypeAssertion<B>
-  | readonly MinimalTypeAssertions<B>[]
-  | { [k: string]: MinimalTypeAssertions<B> };
+type MinTypeAssertions<B = never> =
+  | MinTypeAssertion<B>
+  | readonly MinTypeAssertions<B>[]
+  | { [k: string]: MinTypeAssertions<B> };
 
-type _SatisfiesAssertion<T, A extends MinimalTypeAssertion, Name = T> = EnforceSubtype<
+type _SatisfiesAssertion<T, A extends MinTypeAssertion, Name = T> = EnforceSubtype<
   Validity,
   (For<T, Name> & A)['assert']
 >;
 
 type _SatisfiesInternal<T, A, Name = T> = AssumeSubtype<
   Validity,
-  A extends MinimalTypeAssertion ? EnforceSubtype<Validity, _SatisfiesAssertion<T, A, Name>>
+  A extends MinTypeAssertion ? EnforceSubtype<Validity, _SatisfiesAssertion<T, A, Name>>
   : A extends readonly unknown[] ? never
   : // AssumeSubtype<readonly Validity[], { [K in keyof A]: _SatisfiesInternal<T, A[K], Name> }>
     never
   // : AssumeSubtype<Validity, { [K in keyof A]: _SatisfiesInternal<T, A[K], Name> }>
 >;
 
-type _Satisfies<T, A extends MinimalTypeAssertions, Name = T> = AssumeSubtype<
+type _Satisfies<T, A extends MinTypeAssertions, Name = T> = AssumeSubtype<
   Validity,
   _SatisfiesInternal<T, A, Name>
 >;
 
-type Satisfies<T, A extends MinimalTypeAssertions<T>> = _Satisfies<T, A>;
+type Satisfies<T, A extends MinTypeAssertions> = _Satisfies<T, A>;
 
 type VariableSatisfies<
   V extends { [k: string]: any },
-  A extends TypeAssertions<PropsOf<V>>,
+  A extends MinTypeAssertions<PropsOf<V>>,
 > = EnforceSubtype<
   Validity,
   PropsOf<{ [K in keyof V]: _Satisfies<V[K], A, K extends string ? _Name<`typeof ${K}`> : V[K]> }>
 >;
 
-interface TypeAssertionWithInversion extends MinimalTypeAssertion {
-  invert: Valid | Invalid<['missing inverted assertion']>;
+interface MissingInverted extends MinTypeAssertion {
+  assert: Invalid<['missing inverted assertion']>;
 }
 
-export interface Not<
-  A extends MinimalTypeAssertion<Base>,
-  Base = BaseTarget<A>,
-> extends TypeAssertion<Base> {
-  assert: A extends TypeAssertionWithInversion ? (For<Target<this>, Name<this>> & A)['invert']
-  : Satisfies<Target<this>, A> extends Valid ? Invalid<['expected', Name<this>, 'to fail', A]>
-  : Valid;
-  invert: TargetSatisfies<this, A>;
-  implies: Implication<A, 'allowsNot'>;
-  allows: Implication<A, 'impliesNot'>;
-  decides: Implication<A, 'decidesNot'>;
-  impliesNot: Implication<A, 'allows'>;
-  allowsNot: Implication<A, 'implies'>;
-  decidesNot: Implication<A, 'decides'>;
+interface TypeAssertionWithInversion extends MinTypeAssertion {
+  invert: MinTypeAssertion | MissingInverted;
 }
+
+export interface _Not<
+  A extends MinTypeAssertion<Base>,
+  Base extends BaseTarget<A> = BaseTarget<A>,
+> extends TypeAssertion<Base> {
+  assert: Satisfies<Target<this>, A> extends Valid ? Invalid<['expected', Name<this>, 'to fail', A]>
+  : Valid;
+  invert: A;
+  // implies: Implication<this, A, 'allowsNot'>;
+  // allows: Implication<this, A, 'impliesNot'>;
+  // decides: Implication<this, A, 'decidesNot'>;
+  // impliesNot: Implication<this, A, 'allows'>;
+  // allowsNot: Implication<this, A, 'implies'>;
+  // decidesNot: Implication<this, A, 'decides'>;
+}
+
+type Not<A extends MinTypeAssertion<never>> = A extends TypeAssertionWithInversion ? A['invert'] : _Not<A>;
 
 type SoftIntersect<A, B> =
   A extends infer _A extends B ? A & _A
@@ -344,15 +376,21 @@ type SoftIntersectItems<T extends readonly Default[], Default = T[number]> = Sof
   [Default]
 >[0];
 
-type ImpliedIfValid<T, A extends TypeAssertion, _A extends TypeAssertion = A & { [_target]: T }> = Exclude<
+type ImpliedIfValid<
+  T,
+  A extends MinTypeAssertion<Base>,
+  Base = BaseTarget<A>,
+  _A extends Implications<Base> = Extract<A, _Implications> & { [_target]: T },
+> = Exclude<
   SoftIntersect<T, SoftIntersectItems<_A['implies'] | _A['decides']>>,
   _A['impliesNot'][number] | _A['decidesNot'][number]
 >;
 
 type ImpliedIfInvalid<
   T,
-  A extends TypeAssertion,
-  _A extends TypeAssertion = A & { [_target]: T },
+  A extends MinTypeAssertion<Base>,
+  Base = BaseTarget<A>,
+  _A extends Implications<Base> = Extract<A, _Implications> & { [_target]: T },
 > = Exclude<
   SoftIntersect<T, SoftIntersectItems<_A['allowsNot'] | _A['decidesNot']>>,
   _A['allows'][number] | _A['decides'][number]
@@ -364,12 +402,16 @@ interface VariableObj<T = any> {
 
 type ImpliesForVariable<
   This extends TypeFunctionBase<VariableObj<any>>,
-  A extends TypeAssertion<any>,
-  Field extends `${'implies' | 'allows' | 'decides'}${'Not' | ''}`,
-  Base extends readonly unknown[] = (A & { [_target]: PropsOf<Target<This>> })[Field],
+  A extends MinTypeAssertion,
+  Field extends keyof _Implications,
+  Base extends readonly unknown[] = (Extract<A, _Implications> & {
+    [_target]: PropsOf<Target<This>>;
+  })[Field],
 > = { [Idx in keyof Base]: { [K in keyof Target<This>]: Base[Idx] } };
 
-interface Variable<A extends TypeAssertion> extends TypeAssertion<VariableObj<BaseTarget<A>>> {
+interface Variable<A extends MinTypeAssertion<Base>, Base = BaseTarget<A>> extends TypeAssertion<
+  VariableObj<Base>
+> {
   assert: VariableSatisfies<Target<this>, A>;
   invert: VariableSatisfies<Target<this>, Not<A>>;
 
@@ -382,7 +424,7 @@ interface Variable<A extends TypeAssertion> extends TypeAssertion<VariableObj<Ba
 }
 
 interface TypeFunctionBase<in InBase> {
-  readonly [_target]: unknown;
+  // readonly [_target]: unknown;
   readonly [_targetBase]: Contravariant<InBase>;
 }
 
@@ -391,41 +433,51 @@ type TypeFunctionOutput<K extends PropertyKey, out OutBase> = { readonly [_ in K
 type TypeFunction<K extends PropertyKey, InBase = any, OutBase = any> = TypeFunctionBase<InBase>
   & TypeFunctionOutput<K, OutBase>;
 
-interface TypeAssertionTransform<A extends TypeAssertion<never> = TypeAssertion> extends TypeFunction<
-  'assertion',
-  A,
-  TypeAssertion<never>
-> {
-  assertion: TypeAssertion<never>;
+interface TypeAssertionTransform<
+  in A extends MinTypeAssertion<never> = MinTypeAssertion<any>,
+> extends TypeFunction<'assertion', A, MinTypeAssertion<never>> {
+  assertion: MinTypeAssertion<never>;
 }
 
-interface UnchangedTypeAssertion extends TypeAssertionTransform {
+interface UnchangedTypeAssertion extends TypeAssertionTransform<MinTypeAssertion<never>> {
   assertion: Target<this>;
 }
 
-interface ForVariable extends TypeAssertionTransform {
+interface ForVariable extends TypeAssertionTransform<MinTypeAssertion<never>> {
   assertion: Variable<Target<this>>;
 }
 
-interface InvertAssertion extends TypeAssertionTransform<TypeAssertion<never>> {
+interface InvertAssertion extends TypeAssertionTransform<MinTypeAssertion<never>> {
   assertion: Not<Target<this>>;
 }
 
 interface ComposeTypeAssertionTransform<
   out A extends TypeAssertionTransform<B['assertion']>,
   out B extends TypeAssertionTransform<Base>,
-  in Base extends TypeAssertion<never> = BaseTarget<B>,
+  in Base extends MinTypeAssertion<never> = BaseTarget<B>,
 > extends TypeAssertionTransform<Base> {
   assertion: TransformTypeAssertion<TransformTypeAssertion<Target<this>, B>, A>;
 }
 
 type TransformTypeAssertion<
-  A extends TypeAssertion<never>,
+  A extends MinTypeAssertion<never>,
   F extends TypeAssertionTransform<A>,
 > = ApplyTypeFunction<F, 'assertion', A>;
 
-interface CommonAssertions<T, F extends TypeAssertionTransform<TypeAssertion<T>> = UnchangedTypeAssertion> {
-  Satisfies<A extends TypeAssertion<T>>(this: void): Satisfies<T, TransformTypeAssertion<A, F>>;
+interface CommonAssertions<
+  T,
+  // F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
+  F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
+> {
+  // Satisfies<A extends MinTypeAssertion<T>>(this: void): Satisfies<T, TransformTypeAssertion<A, F>>;
+  // Extends<Super>(this: void): Satisfies<T, TransformTypeAssertion<Extends<Super>, F>>;
+  // Not: CommonAssertions<T, ComposeTypeAssertionTransform<InvertAssertion, F, MinTypeAssertion<T>>>;
+}
+interface _CommonAssertions<
+  T,
+  F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
+> {
+  Satisfies<A extends MinTypeAssertion<T>>(this: void): Satisfies<T, TransformTypeAssertion<A, F>>;
   Extends<Super>(this: void): Satisfies<T, TransformTypeAssertion<Extends<Super>, F>>;
-  Not: CommonAssertions<T, ComposeTypeAssertionTransform<InvertAssertion, F, TypeAssertion<T>>>;
+  Not: CommonAssertions<T, ComposeTypeAssertionTransform<InvertAssertion, F, MinTypeAssertion<T>>>;
 }

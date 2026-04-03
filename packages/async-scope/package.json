@@ -6,10 +6,15 @@
   "exports": "./dist/index.js",
   "type": "module",
   "scripts": {
-    "test": "tsgo -b tsconfig.test.json --noCheck && node --enable-source-maps --test \"./dist/**/*.test.js\""
+    "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test \"./dist/**/*.test.js\""
   },
   "devDependencies": {
     "@private/test-utils": "workspace:",
     "@sinonjs/fake-timers": "catalog:"
-  }
+  },
+  "files": [
+    "./dist",
+    "!*.map",
+    "!*.test.*"
+  ]
 }
