@@ -5,7 +5,7 @@ import type {
   CancellationListener,
   Cancellable,
 } from '../cancel.ts';
-import Symbols from '../symbols.ts';
+import * as Symbols from '../symbols.ts';
 import type { Awaitable, Falsy } from '../types.ts';
 import { isArray, isIterable } from '../utils.ts';
 import { Subscription, type SubscriptionLifecycle } from '../events/sub.js';

@@ -1,6 +1,6 @@
 import { Token } from '../token.ts';
 import { Scope, STATIC_SCOPE, type ToScope, StandardScope } from '../scope.ts';
-import { isArray, TODO } from '../utils.ts';
+import { isArray } from '../utils.ts';
 import { ScopedResources } from '../scopedResource.ts';
 
 export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Scope {
@@ -46,7 +46,7 @@ export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Sco
 
     if (src instanceof AbortSignal) {
       hasNonScopeToken = true;
-      if (src.aborted) return TODO('pre-cancelled Token');
+      if (src.aborted) return Token.cancelled(src.reason);
 
       abortSignals.add(src);
       return;

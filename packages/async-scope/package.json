@@ -1,19 +1,21 @@
 {
   "name": "@youngspe/async-scope",
-  "version": "0.1.0",
+  "version": "0.1.0-dev.0",
   "main": "./dist/index.js",
-  "exports": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./events": "./dist/events.js"
+  },
   "type": "module",
   "scripts": {
     "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test \"./dist/**/*.test.js\""
   },
   "devDependencies": {
-    "@private/test-utils": "workspace:",
-    "@sinonjs/fake-timers": "catalog:"
+    "knip": "^6.3.0"
   },
   "files": [
     "./dist",
-    "!*.map",
-    "!*.test.*"
+    "!**/*.map",
+    "!**/*.test.*"
   ]
 }

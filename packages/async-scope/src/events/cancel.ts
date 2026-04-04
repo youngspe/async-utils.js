@@ -1,6 +1,6 @@
 import { cancelObject, type CancellableOrDisposable, type CancellableParent } from '../cancel.ts';
 import { combineErrors, toError } from '../error.ts';
-import Symbols from '../symbols.ts';
+import * as Symbols from '../symbols.ts';
 import { joinPromises } from '../join.ts';
 import { Token, type TokenController } from '../token.ts';
 import type { Awaitable } from '../types.ts';

@@ -73,21 +73,3 @@ interface IsArrayFunction {
  * This is an alias for {@link Array.isArray} but the types work out better for readonly arrays.
  */
 export const isArray = Array.isArray.bind(Array) as IsArrayFunction;
-
-/** Throw this when something isn't implemented yet. */
-export class Todo extends Error {
-  static {
-    this.prototype.name = 'TODO';
-  }
-}
-
-/**
- * Shorthand for <code>throw new {@linkcode Todo()}</code>, but can be used in expression position.
- *
- * @example
- *
- * return newFeatureEnabled ? TODO('new feature implementation') : oldImplementation();
- */
-export function TODO<T = never>(msg?: string): T {
-  throw new Todo(msg);
-}

@@ -2,7 +2,7 @@ import { CancellationError } from './error.ts';
 import { Subscription } from './events/sub.js';
 import { whenAllSettled } from './join.ts';
 import type { ToScope } from './scope.ts';
-import type Symbols from './symbols.ts';
+import type * as Symbols from './symbols.ts';
 import type { Awaitable, Falsy } from './types.ts';
 import { isArray } from './utils.ts';
 
