@@ -120,7 +120,7 @@ export const allObject = <T>(values: Record<string, ImmediateInput<T>>): Immedia
 
 export const any = <T>(values: Iterable<ImmediateInput<T>> | readonly ImmediateInput<T>[]) => {
   if (values instanceof Array) {
-    if (values.length === 1) return Immediate.resolve<T>(values[0]!);
+    if (values.length === 1) return Immediate.resolve(values[0]!);
     if (values.length === 0) return Immediate.NEVER;
   }
 
@@ -209,7 +209,7 @@ export const race = <T, S extends ImmediateState>(
 export const allSettledIterable = <T, S extends ImmediateState.Initial>(
   values: Iterable<ImmediateInput<T, S>>,
 ): Immediate<PromiseSettledResult<T>[], S> =>
-  new Immediate((resolve, reject) => {
+  new Immediate(resolve => {
     /**
      * As each task is complete, assign its respective index in this array.
      * Once all tasks are complete, resolve with this value.

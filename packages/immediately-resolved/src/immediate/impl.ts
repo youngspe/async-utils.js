@@ -109,7 +109,7 @@ export class _ImmediateImpl<T> implements _Immediate<T, ImmediateState.Initial> 
       innerError = undefined;
       this[_wrappedError] = _innerError;
 
-      if (_innerError.isRejecting()) return _innerError as Immediate<T> as this;
+      if (_innerError.isRejected()) return _innerError as Immediate<T> as this;
 
       if (_innerError.isResolved()) {
         this.error = _innerError.value;
@@ -218,13 +218,9 @@ export class _ImmediateImpl<T> implements _Immediate<T, ImmediateState.Initial> 
     return !('error' in this) && 'value' in this;
   }
 
-  isRejecting<T1, S1 extends ImmediateState.Initial>(
-    this: this & _Immediate<T1, S1>,
-  ): this is Immediate.Rejecting<T1, S1> {
-    return 'error' in this || !!this[_wrappedError];
-  }
-
-  isRejected<T1 = T>(this: _Immediate<T1>): this is Immediate<T1, ImmediateState.Rejected> {
+  isRejected<T1, S1 extends ImmediateState.Initial>(
+    this: _Immediate<T1, S1>,
+  ): this is Immediate<never, S1> & Immediate.Rejected<T1> {
     return 'error' in this;
   }
 
@@ -249,32 +245,35 @@ export class _ImmediateImpl<T> implements _Immediate<T, ImmediateState.Initial> 
     );
   }
 
-  public static resolve<T, S extends ImmediateState.Initial>(
-    value?: ImmediateInput<T, S>,
-  ): Immediate<T | undefined, S> {
-    if (value instanceof Immediate) return value as Immediate<T | undefined, S>;
+  public static resolve<T>(
+    this: void,
+    value?: ImmediateInput<T, ImmediateState.Resolved>,
+  ): Immediate.Resolved<T> {
+    if (value instanceof Immediate) return value as Immediate.Resolved<T>;
 
     if (isPromiseLike(value)) {
-      return new this(resolve => resolve(value)) as _Immediate<T | undefined, any> as Immediate<
-        T | undefined,
-        S
-      >;
+      return new _ImmediateImpl<T | undefined>(resolve => resolve(value)) as _Immediate<
+        T,
+        any
+      > as Immediate.Resolved<T>;
     }
 
-    return createResolved(value) as Immediate<T | undefined, any> as Immediate<T | undefined, S>;
+    return createResolved(value as T) as Immediate<T, any> as Immediate.Resolved<T>;
   }
 
-  public static reject(value?: unknown): Immediate<never> {
+  public static reject(this: void, value?: unknown): Immediate.Rejected<never> {
     if (Immediate.isImmediate(value)) {
-      if (value.isRejecting()) return value;
-      if (value.isResolved()) return createRejected(value.value) as Immediate<never>;
+      if (value.isRejected()) return value as unknown as Immediate.Rejected<never>;
+      if (value.isResolved()) return createRejected(value.value) as Immediate.Rejected<never>;
     }
 
     if (isPromiseLike(value)) {
-      return new this((_, reject) => reject(value)) as Immediate<any> as Immediate<never>;
+      return new _ImmediateImpl((_, reject) =>
+        reject(value),
+      ) as Immediate<any> as Immediate.Rejected<never>;
     }
 
-    return createRejected(value) as Immediate<never>;
+    return createRejected(value) as Immediate.Rejected<never>;
   }
 
   public static all<T>(
@@ -296,6 +295,7 @@ export class _ImmediateImpl<T> implements _Immediate<T, ImmediateState.Initial> 
   }
 
   public static try<T, Args extends readonly unknown[] = []>(
+    this: void,
     fn: (...args: Args) => ImmediateInput<T>,
     ...args: Args
   ): Immediate<T> {
@@ -308,7 +308,10 @@ export class _ImmediateImpl<T> implements _Immediate<T, ImmediateState.Initial> 
 
   public static readonly NEVER = Object.freeze(Object.create(_ImmediateImpl.prototype)) as Immediate<never>;
 
-  isImmediate<A extends ImmediateInput<T>, T>(value: A): value is SoftIntersect<A, Immediate<T>> {
+  static isImmediate<A extends ImmediateInput<T>, T>(
+    this: void,
+    value: A,
+  ): value is SoftIntersect<A, Immediate<T>> {
     return value !== null && typeof value === 'object' && _marker in value;
   }
 }

@@ -103,7 +103,7 @@ suite('Immediate', () => {
         5,
       ]);
 
-      TypeAssert(_ => _.Variable({ target }).Not.Extends<Immediate<any, ImmediateState.Settled>>);
+      TypeAssert.Variable({ target }, _ => _.Not.Extends<Immediate<any, ImmediateState.Settled>>());
 
       assert(target.isResolved());
 
@@ -119,7 +119,8 @@ suite('Immediate', () => {
         timers.setTimeout(70, 3 as const),
       ]);
 
-      verifyNotComplete<1 | 2 | 3>(target);
+      verifyNotComplete(target);
+      TypeAssert.Variable({ target }, _ => _.Extends<Immediate<1 | 2 | 3>>());
 
       assert.equal(await target, 2);
     });
@@ -133,7 +134,8 @@ suite('Immediate', () => {
         5,
       ]);
 
-      verifySettled<1 | 2 | 3>(target);
+      verifySettled(target);
+      TypeAssert.Variable({ target }, _ => _.Not.Extends<any>());
 
       assert.equal(await target, 3);
     });

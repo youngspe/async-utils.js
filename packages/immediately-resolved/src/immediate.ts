@@ -22,14 +22,17 @@ export interface _Immediate<T, S extends ImmediateState.Initial = ImmediateState
   readonly value?: ValueOf<this>;
   readonly error?: unknown;
 
-  isResolved<T1 = T>(this: _Immediate<T1>): this is Immediate<T1, ImmediateState.Resolved>;
-  isRejecting<T1 = T, S1 extends ImmediateState.Initial = S>(
+  isResolved(): this is Immediate.Resolved<T>;
+  isResolved<T1 = T, S1 extends ImmediateState.Initial = S>(
     this: _Immediate<T1, S1>,
-  ): this is Immediate.Rejecting<T1, S1>;
+  ): this is Immediate.Resolved<T1>;
   isRejected<T1 = T, S1 extends ImmediateState.Initial = S>(
     this: Immediate<T1, S1>,
   ): this is Immediate<never, S1> & Immediate.Rejected<T1>;
-  isSettled<T1 = T>(this: _Immediate<T1>): this is Immediate<T1, ImmediateState.Settled>;
+  isSettled(): this is Immediate<T, ImmediateState.Settled>;
+  isSettled<T1 = T, S1 extends ImmediateState.Initial = S>(
+    this: _Immediate<T1, S1>,
+  ): this is Immediate<T1, ImmediateState.Settled>;
 
   then<TResult1 = T, TResult2 = never>(
     onResolve?: ((value: ValueOf<this>) => ImmediateInput<TResult1, S | ImmediateState.Resolved>) | null,
@@ -86,7 +89,8 @@ export type Immediate<T, S extends ImmediateState.Initial = ImmediateState> =
   ImmediateInner<T, S> extends infer _I extends _Immediate<T, S> ? _I : _Immediate<T, S>;
 
 export type ImmediateInput<T, S extends ImmediateState.Initial = ImmediateState> =
-  | Exclude<T, Promise<any> | PromiseLike<any>>
+  // | Exclude<T, Promise<any> | PromiseLike<any>>
+  | T
   | _Immediate<T, S>
   | (S extends ImmediateState.Resolved | ImmediateState.Rejected ? never : PromiseLike<T> | Promise<T>);
 
@@ -157,28 +161,31 @@ type AwaitedValueOfObject<A extends MappingObject> = EnforceSubtype<
 
 type PropsOf<T> = T extends { [_ in keyof T]: infer V } ? V : T[keyof T];
 
-export interface ImmediateConstructor {
+export interface ImmediateConstructor extends ImmediateStatics {
   new <T>(
     executor: (resolve: (value: Awaitable<T>) => void, reject: (error?: unknown) => void) => void,
   ): Immediate<T>;
 
   prototype: Immediate<unknown>;
+}
 
-  resolve(): Immediate<void, ImmediateState.Resolved>;
+export interface ImmediateStatics {
+  resolve(): Immediate.Resolved<void>;
   resolve<A extends Immediate<any>>(value: A): A;
-  resolve<T, A extends ImmediateInput<T, S>, S extends ImmediateState.Initial = ImmediateState.For<A>>(
-    value: A | ImmediateInput<T, S>,
-  ): Immediate<T, S>;
-  resolve<T, A extends ImmediateInput<T, S>, S extends ImmediateState.Initial = ImmediateState.For<A>>(
+  resolve<
+    A extends ImmediateInput<T, S>,
+    T = AwaitedValueOf<A>,
+    S extends ImmediateState.Initial = ImmediateState.For<A>,
+  >(
     value: A | ImmediateInput<T>,
   ): Immediate<T, S>;
-  resolve<T, S extends ImmediateState.Initial = ImmediateState>(
+  resolve<T, S extends ImmediateState.Initial = ImmediateState.Resolved>(
     value: ImmediateInput<T, S>,
   ): Immediate<T, S>;
 
   reject<T = never>(): Immediate<T, ImmediateState.Rejected>;
   reject<A extends Immediate<T, ImmediateState.Rejected>, T = never>(value: A): A;
-  reject<T = never>(value: Immediate<T, ImmediateState.Settled>): Immediate<T, ImmediateState.Rejected>;
+  reject<T = never>(value: Immediate<T, ImmediateState.Settled>): Immediate.Rejected<T>;
   reject<T = never>(
     value: Immediate<any, ImmediateState.Resolved | ImmediateState.Rejected>,
   ): Immediate<T, ImmediateState.Rejected>;
@@ -246,11 +253,11 @@ export interface ImmediateConstructor {
   ): Immediate<T, S>;
 
   race<
-    const A extends ImmediateInputOfArray<T>,
+    const A extends ImmediateInputOfArray<T, S>,
     T extends readonly unknown[] = AwaitedValueOfArray<A>,
     S extends readonly ImmediateState.Initial[] = ImmediateStatesOfArray<A>,
   >(
-    values: A | ImmediateInputOfArray<T, S>,
+    values: A,
   ): Immediate<ValueOfRace<T, ImmediateStatesOfArray<A>>, StateOfRace<A>>;
   race<
     A extends ImmediateInput<T, S>,

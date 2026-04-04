@@ -28,6 +28,7 @@
   "devDependencies": {
     "@eslint/js": "catalog:",
     "@private/config": "workspace:",
+    "@private/test-utils": "workspace:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "7.0.0-dev.20260224.1",
     "eslint": "catalog:",

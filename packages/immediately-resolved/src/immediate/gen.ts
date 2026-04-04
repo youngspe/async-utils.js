@@ -1,22 +1,20 @@
-import { type _Immediate, Immediate } from '../immediate.ts';
-import type {
-  _evaluationKind,
-  Awaitable,
-  EvaluationKind,
-  EvaluationKindOf,
-  ImmediateInput,
-} from '../types.ts';
+import { type _Immediate, type AwaitedValueOf, Immediate, type ImmediateInput } from '../immediate.ts';
+import type { ImmediateState } from '../state.ts';
+import type { Awaitable } from '../types.ts';
 import { isPromiseLike } from '../util.ts';
 
-interface _SuspendSymbol<out K extends EvaluationKind> {
-  [_evaluationKind]?: K;
+declare const _suspendSymbolState: unique symbol;
+
+interface _SuspendSymbol<out S extends ImmediateState.Initial> {
+  [_suspendSymbolState]?: S;
 }
-type SuspendSymbol<K extends EvaluationKind = EvaluationKind> = typeof suspendSymbol & _SuspendSymbol<K>;
+type SuspendSymbol<K extends ImmediateState.Initial = ImmediateState> = typeof suspendSymbol
+  & _SuspendSymbol<K>;
 
 export interface ImmediateGenerator<
   T,
-  out K extends EvaluationKind = EvaluationKind,
-> extends IterableIterator<SuspendImmediateGenerator<T> | SuspendSymbol<K>, T, typeof pollSymbol> {}
+  out S extends ImmediateState.Initial = ImmediateState,
+> extends IterableIterator<SuspendImmediateGenerator<T> | SuspendSymbol<S>, T, typeof pollSymbol> {}
 
 const resumeWith = Symbol('resumeWith');
 const suspendSymbol = Symbol('suspend');
@@ -27,24 +25,24 @@ interface SuspendImmediateGenerator<_T> {
 }
 
 type AwaitFunc = <
-  A extends ImmediateInput<T, K>,
-  T = A extends _Immediate<infer _T> | Awaitable<infer _T> ? _T : unknown,
-  K extends EvaluationKind = EvaluationKindOf<A>,
+  A extends ImmediateInput<T, S>,
+  T = AwaitedValueOf<A>,
+  S extends ImmediateState.Initial = ImmediateState.For<A>,
 >(
-  x: A,
-) => ImmediateGenerator<T, K>;
+  value: A | ImmediateInput<T, S>,
+) => ImmediateGenerator<T, S>;
 
 const generatorToImmediate = <
   T extends _T,
-  G extends ImmediateGenerator<Awaitable<T>, K>,
-  K extends EvaluationKind = G extends ImmediateGenerator<infer A, infer _K> ? _K | EvaluationKindOf<A>
-  : EvaluationKind,
+  G extends ImmediateGenerator<Awaitable<T>, S>,
+  S extends ImmediateState = G extends ImmediateGenerator<infer A, infer _K> ? _K | ImmediateState.For<A>
+  : ImmediateState,
   _T = G extends Iterable<any, Awaitable<infer _T>, never> ? _T : unknown,
 >(
   gen: G,
 ) =>
   new Immediate((resolve, reject) => {
-    let _gen: ImmediateGenerator<Awaitable<T>, K> | undefined = gen;
+    let _gen: ImmediateGenerator<Awaitable<T>, S> | undefined = gen;
     let running = false;
     let shouldWake = false;
 
@@ -77,17 +75,18 @@ const generatorToImmediate = <
     };
 
     wake();
-  }) as Immediate<T, K>;
+  }) as Immediate<T, S>;
 
 export const immediate = <
-  T extends _T,
-  G extends ImmediateGenerator<Awaitable<T>, K>,
-  K extends EvaluationKind = G extends ImmediateGenerator<infer A, infer _K> ? _K | EvaluationKindOf<A>
-  : EvaluationKind,
+  const T extends _T,
+  G extends ImmediateGenerator<Awaitable<T>, S>,
+  S extends ImmediateState.Initial = G extends ImmediateGenerator<infer A, infer _S> ?
+    _S | ImmediateState.For<A>
+  : ImmediateState,
   _T = G extends Iterable<any, Awaitable<infer _T>, never> ? _T : unknown,
 >(
   body: (this: { await: AwaitFunc }, await: AwaitFunc) => G,
-): Immediate<T, K> => immediate.bound({ await: awaitFunc }, body);
+): Immediate<T, S | ImmediateState.Rejected> => immediate.bound({ await: awaitFunc }, body);
 
 const resolveNow = <T>(value: T): IterableIterator<never, T, unknown> => ({
   next() {
@@ -110,22 +109,29 @@ const rejectNow = (error: unknown): IterableIterator<never, never, unknown> => (
 immediate.bound = <
   This,
   T extends _T,
-  G extends ImmediateGenerator<Awaitable<T>, K>,
-  K extends EvaluationKind = G extends ImmediateGenerator<infer A, infer _K> ? _K | EvaluationKindOf<A>
-  : EvaluationKind,
+  G extends ImmediateGenerator<Awaitable<T>, S>,
+  S extends ImmediateState.Initial = G extends ImmediateGenerator<infer A, infer _S> ?
+    _S | ImmediateState.For<A>
+  : ImmediateState,
   _T = G extends Iterable<any, Awaitable<infer _T>, never> ? _T : unknown,
 >(
   thisArg: This,
   body: (this: This, await: AwaitFunc) => G,
-): Immediate<_T, K> => generatorToImmediate(body.call(thisArg, awaitFunc));
+): Immediate<_T, S | ImmediateState.Rejected> => generatorToImmediate(body.call(thisArg, awaitFunc));
 
-const awaitFunc = <T, A extends ImmediateInput<T, K>, K extends EvaluationKind = EvaluationKindOf<A>>(
+const awaitFunc = <
+  A extends ImmediateInput<T, K>,
+  T = AwaitedValueOf<A>,
+  K extends ImmediateState.Initial = ImmediateState.For<A>,
+>(
   value: A & ImmediateInput<T, K>,
 ): ImmediateGenerator<T, K> => {
   if (!isPromiseLike(value)) return resolveNow(value);
 
-  if (value instanceof Immediate) {
-    if ('value' in value) return resolveNow(value.value);
+  if (Immediate.isImmediate(value)) {
+    if (value.isResolved()) return resolveNow(value.value);
+    if (value.isRejected()) return rejectNow(value.error);
+
     if ('error' in value && !isPromiseLike(value.error)) return rejectNow(value.error);
   }
 

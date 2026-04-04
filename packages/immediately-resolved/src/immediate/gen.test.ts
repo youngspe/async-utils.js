@@ -11,7 +11,7 @@ suite('immediate', () => {
         return x + 7;
       });
 
-      assert(out.isComplete());
+      assert(out.isSettled());
       assert(!out.isRejected());
       assert(out.isResolved());
       assert.equal(out.value, 130);
@@ -25,7 +25,7 @@ suite('immediate', () => {
         return x + 7;
       });
 
-      assert(out.isComplete());
+      assert(out.isSettled());
       assert(!out.isRejected());
       assert(out.isResolved());
       assert.equal(out.value, 130);
@@ -41,7 +41,7 @@ suite('immediate', () => {
         return x + 7;
       });
 
-      assert(!out.isComplete());
+      assert(!out.isSettled());
       assert(!out.isResolved());
       assert(!out.isRejected());
       const x: number = await out;

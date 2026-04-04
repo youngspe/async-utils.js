@@ -9,7 +9,11 @@
     "test": "tsgo -b tsconfig.test.json --noCheck && node --enable-source-maps --test \"./dist/**/*.test.js\""
   },
   "devDependencies": {
-    "@private/test-utils": "workspace:",
     "@sinonjs/fake-timers": "catalog:"
-  }
+  },
+  "files": [
+    "./dist",
+    "!**/*.test.*",
+    "!**/*.map"
+  ]
 }

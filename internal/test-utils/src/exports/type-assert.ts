@@ -241,8 +241,6 @@ type ImplicationItem =
   | AllImplications<ImplicationItem>
   | AnyImplications<ImplicationItem>;
 
-interface ImplicationsInput<in Base> {}
-
 interface _Implications {
   /** Target extends if valid */
   readonly implies: readonly unknown[];
@@ -332,15 +330,16 @@ export interface _Not<
   assert: Satisfies<Target<this>, A> extends Valid ? Invalid<['expected', Name<this>, 'to fail', A]>
   : Valid;
   invert: A;
-  // implies: Implication<this, A, 'allowsNot'>;
-  // allows: Implication<this, A, 'impliesNot'>;
-  // decides: Implication<this, A, 'decidesNot'>;
-  // impliesNot: Implication<this, A, 'allows'>;
-  // allowsNot: Implication<this, A, 'implies'>;
-  // decidesNot: Implication<this, A, 'decides'>;
+  implies: Implication<this, A, 'allowsNot'>;
+  allows: Implication<this, A, 'impliesNot'>;
+  decides: Implication<this, A, 'decidesNot'>;
+  impliesNot: Implication<this, A, 'allows'>;
+  allowsNot: Implication<this, A, 'implies'>;
+  decidesNot: Implication<this, A, 'decides'>;
 }
 
-type Not<A extends MinTypeAssertion<never>> = A extends TypeAssertionWithInversion ? A['invert'] : _Not<A>;
+export type Not<A extends MinTypeAssertion<never>> =
+  A extends TypeAssertionWithInversion ? A['invert'] : _Not<A>;
 
 type SoftIntersect<A, B> =
   A extends infer _A extends B ? A & _A
@@ -465,15 +464,6 @@ type TransformTypeAssertion<
 > = ApplyTypeFunction<F, 'assertion', A>;
 
 interface CommonAssertions<
-  T,
-  // F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
-  F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
-> {
-  // Satisfies<A extends MinTypeAssertion<T>>(this: void): Satisfies<T, TransformTypeAssertion<A, F>>;
-  // Extends<Super>(this: void): Satisfies<T, TransformTypeAssertion<Extends<Super>, F>>;
-  // Not: CommonAssertions<T, ComposeTypeAssertionTransform<InvertAssertion, F, MinTypeAssertion<T>>>;
-}
-interface _CommonAssertions<
   T,
   F extends TypeAssertionTransform<MinTypeAssertion<T>> = UnchangedTypeAssertion,
 > {
