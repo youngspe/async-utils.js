@@ -1,4 +1,6 @@
-import { CancellationError, toError } from '../error.ts';
+import { CancellationTokenBase } from '@youngspe/async-scope-common';
+
+import { CancellationError, toErrorForCancellation } from '../error.ts';
 import type {
   CancellableOrDisposable,
   CancellableLike,
@@ -7,18 +9,25 @@ import type {
 } from '../cancel.ts';
 import * as Symbols from '../symbols.ts';
 import type { Awaitable, Falsy } from '../types.ts';
-import { isArray, isIterable } from '../utils.ts';
 import { Subscription, type SubscriptionLifecycle } from '../events/sub.js';
 import { CancelEvent } from '../token.ts';
 import type { ToScope } from '../scope.ts';
+import { isArray, isIterable } from '@youngspe/common-async-utils';
 
-export abstract class Token {
+export interface AddCancellableOptions {
+  paused?: boolean | undefined;
+  passive?: boolean | undefined;
+}
+
+export type ErrorFilter = (this: void, error: Error) => true | Error | 'defuse' | Falsy;
+
+export abstract class Token extends CancellationTokenBase {
   /**
    * The reason for the cancellation if this token has already been cancelled, otherwise `undefined`.
    *
    * @see {@link Token#isCancelled}
    */
-  abstract get error(): Error | undefined;
+  abstract override get error(): Error | undefined;
 
   /** If `true`, this token has been _defused_, meaning it is guaranteed never to be cancelled. */
   get isDefused() {
@@ -26,7 +35,7 @@ export abstract class Token {
   }
 
   /**
-   * If `true`, this token has been _cancelled_, and trigger any additional listeners.
+   * If `true`, this token has been _cancelled_, and will not trigger any additional listeners.
    *
    * This is equivalent to `token.error !== undefined`
    *
@@ -48,50 +57,60 @@ export abstract class Token {
    * - `undefined` if the listener could not be safely added. This is typically due to the token being
    *   cancelled and indicates any future attempts will also fail.
    */
-  protected abstract addOne(listener: CancellableOrDisposable): Subscription | undefined;
+  protected abstract addOne(
+    listener: CancellableOrDisposable,
+    options?: AddCancellableOptions,
+  ): Subscription | undefined;
 
   /**
    * Adds listeners
    *
-   * @param listeners - listeners that should be added to this token.
-   * Each parameter may be:
-   * - A {@link CancellableLike}:
-   *   - A {@link Cancellable}
-   *   - A {@link Disposable}
-   *   - An {@link AsyncDisposable}
-   *   - A falsy value, which will be ignored
-   *   - A (possibly nested) array of any of the above.
+   * @param listener - a listener that should be added to this token.
+   * This may be:
+   * - A {@link Cancellable}
+   * - A {@link Disposable}
+   * - An {@link AsyncDisposable}
+   * - A falsy value, which will be ignored
    * - A function that receives an {@link Error} and optionally returns a promise.
+   * - A (possibly nested) array of any of the above.
    *
    * @returns
    * - A {@link Subscription} that may be used to pause, resume, or remove the provide listeners if either the listeners were safely added or the token is defused.
    * - `undefined` if no listener could be safely added. This is typically due to the token being cancelled
    *   and indicates any future attempts will also fail.
    */
-  add(...listeners: (CancellableLike | CancellationListener)[]): Subscription | undefined {
+  override add(
+    listener: CancellableLike<CancellationListener>,
+    options?: AddCancellableOptions,
+  ): Subscription | undefined {
     if (this.isCancelled) return undefined;
     if (this.isDefused) return Subscription.noop;
 
     const subs: Subscription[] = [];
 
-    for (let listener of listeners) {
-      if (!listener) continue;
+    const inner = (listener: CancellableLike<CancellationListener>): boolean => {
+      if (!listener) return true;
 
       if (isArray(listener)) {
-        this.add(...listener);
-        continue;
+        for (const child of listener) {
+          if (!inner(child)) return false;
+        }
+
+        return true;
       }
 
       if (typeof listener === 'function') {
         listener = { cancel: listener };
       }
 
-      const sub = this.addOne(listener);
+      const sub = this.addOne(listener, options);
 
-      if (!sub) return undefined;
+      if (!sub) return false;
       subs.push(sub);
-    }
+      return true;
+    };
 
+    if (!inner(listener)) return undefined;
     return Subscription.collect(subs);
   }
 
@@ -150,6 +169,12 @@ export abstract class Token {
     if (error) throw error;
   }
 
+  filter(filter: ErrorFilter): Token {
+    const ctrl = Token.createController({ filter, sealed: true });
+    this.add(ctrl, { passive: true });
+    return ctrl.token;
+  }
+
   static createController(this: void, options?: Token.CreateParams): TokenController {
     return CancelEvent.createController(options);
   }
@@ -165,7 +190,7 @@ export abstract class Token {
 
   /** @returns a token that has already been cancelled. */
   static cancelled(reason: unknown = new CancellationError()): Token {
-    return new CancelledToken(toError(reason));
+    return new CancelledToken(toErrorForCancellation(reason));
   }
 
   /**
@@ -191,8 +216,9 @@ export abstract class Token {
 
     if (tokens.size > 1) {
       return Token.create({
+        sealed: true,
         init: ctrl => {
-          const sub = Subscription.collect(Array.from(tokens, t => t.add(ctrl)));
+          const sub = Subscription.collect(Array.from(tokens, t => t.add(ctrl, { passive: true })));
           return {
             resume: () => {
               sub.resume();
@@ -213,7 +239,7 @@ export abstract class Token {
 
   /** @returns a {@link Token} that is cancelled when `signal` is aborted. */
   static fromAbortSignal(this: void, signal: AbortSignal, options?: Token.FromAbortSignalParams): Token {
-    if (signal.aborted) return new CancelledToken(toError(signal.reason));
+    if (signal.aborted) return new CancelledToken(toErrorForCancellation(signal.reason));
     const { onError, ...callbacks } = options ?? {};
 
     return Token.create({
@@ -234,6 +260,7 @@ export abstract class Token {
   static from(this: void, src: ToScope): Token {
     const tokens = new Set<Token>();
     const signals = new Set<AbortSignal>();
+    const visited = new Set<object>();
 
     const flatten = (src: ToScope): Token | undefined => {
       if (!src) return undefined;
@@ -260,6 +287,9 @@ export abstract class Token {
 
         return undefined;
       }
+
+      if (visited.has(src)) return undefined;
+      visited.add(src);
 
       return flatten(src.scope) || flatten(src.token) || flatten(src.signal);
     };
@@ -289,10 +319,10 @@ export namespace Token {
      */
     onDefuse?: ((this: void) => void) | undefined;
     /**
-     * Called on {@link CancellationController.cancel}. If a promise-like is returned, no listeners will be
+     * Called on {@link TokenController#cancel}. If a promise-like is returned, no listeners will be
      * notified of the cancellation until after the promise-like resolves.
      *
-     * If this callback throws or rejects, the {@link CancellationController.cancel} promise will also
+     * If this callback throws or rejects, the {@link TokenController#cancel} promise will also
      * reject after all cancellation listeners and the {@link onBeforeCancel} promise is settled
      * if present.
      */
@@ -301,17 +331,25 @@ export namespace Token {
     /**
      * Called after all promises returned by cancellation listeners have either resolved or rejected.
      *
-     * If this callback exists and returns a promise-like, the {@link CancellationController.cancel} promise
+     * If this callback exists and returns a promise-like, the {@link TokenController#cancel} promise
      * will not resolve until after this promise-like is settled.
      *
-     * If this callback throws or rejects, the {@link CancellationController.cancel} promise will
+     * If this callback throws or rejects, the {@link TokenController#cancel} promise will
      * also reject.
      */
     onAfterCancel?: ((this: void, error: Error) => Awaitable<void>) | undefined;
   }
 
   export interface CreateParams
-    extends SubscriptionLifecycle<[ctrl: TokenController], [ctrl: TokenController]>, Callbacks {}
+    extends SubscriptionLifecycle<[ctrl: TokenController], [ctrl: TokenController]>, Callbacks {
+    filter?: ErrorFilter;
+    /**
+     * If `true`, then when all parent tokens are defused, the token will be defused.
+     *
+     * @default false
+     */
+    sealed?: boolean | undefined;
+  }
 
   export interface FromAbortSignalParams extends Callbacks {
     /**

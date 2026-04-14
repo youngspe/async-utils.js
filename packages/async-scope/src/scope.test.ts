@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 
 import { Scope } from './scope.ts';
-import { delay } from './timer.ts';
+import { delay } from './timers.ts';
 import { Token } from './token.ts';
 import { ResourceKey } from './scopedResource.ts';
 
@@ -16,7 +16,7 @@ suite('Scope', () => {
       test('returns the correct result', async () => {
         const scope = Scope.static;
 
-        const out = await scope.run(async () => 'foo');
+        const out = await scope.launch(async () => 'foo');
 
         assert.equal(out, 'foo');
       });
@@ -31,7 +31,7 @@ suite('Scope', () => {
         await Promise.all([
           delay(5).then(() => ctrl.cancel(error)),
           assert.rejects(
-            () => scope.run(async () => delay(10).then(() => 'foo'), { token: ctrl.token }),
+            () => scope.launch(async () => delay(10).then(() => 'foo'), { token: ctrl.token }),
             error,
           ),
         ]);
@@ -48,7 +48,7 @@ suite('Scope', () => {
     test('access a resource', async () => {
       const scope = Scope.static.withResources(r => r.put(fooResource, 'foo1'));
 
-      const out = await scope.run(({ resources }) => resources.get({ fooResource }));
+      const out = await scope.launch(({ resources }) => resources.get({ fooResource }));
 
       assert.deepEqual(out, { fooResource: 'foo1' });
     });
@@ -56,10 +56,10 @@ suite('Scope', () => {
     test('override a resource', async () => {
       const scope = Scope.static.withResources(r => r.put(fooResource, 'foo1').put(barResource, 'bar1'));
 
-      const out = await scope.run(async ({ scope }) => {
+      const out = await scope.launch(async ({ scope }) => {
         const out = await scope
           .withResources(r => r.put(fooResource, 'foo2'))
-          .run(({ resources }) => resources.get({ fooResource, barResource }));
+          .launch(({ resources }) => resources.get({ fooResource, barResource }));
 
         assert.deepEqual(out, { fooResource: 'foo2', barResource: 'bar1' });
 
@@ -83,7 +83,7 @@ suite('Scope', () => {
         r.put(fooDisposableResource, cleanup(6)).put(barDisposableResource, cleanup(5)),
       );
 
-      await scope.run(({ scope }) => {
+      await scope.launch(({ scope }) => {
         scope.withResources(r => r.put(fooDisposableResource, cleanup(7)));
       });
 

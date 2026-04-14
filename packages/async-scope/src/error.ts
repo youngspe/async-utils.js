@@ -1,4 +1,4 @@
-import { isArray, isIterable } from './utils.ts';
+import { isArray, isIterable } from '@youngspe/common-async-utils';
 
 /**
  * Represents an operation that has been cancelled but not necessarily due to a failure.
@@ -39,12 +39,25 @@ type ToError<T> =
  * - Any other value, a {@link CancellationError} with the {@link CancellationError.value|value} property
  *   set to `value`.
  */
-export function toError<T>(value: T): ToError<T>;
-export function toError(value: unknown): Error {
+export function toErrorForCancellation<T>(value: T): ToError<T>;
+export function toErrorForCancellation(value: unknown): Error {
   const errors = new Set<Error>();
+  let isCancellation = true;
 
   const inner = (value: unknown): Error | undefined => {
-    if (value instanceof Error) return value;
+    if (value instanceof Error) {
+      if (value.name === 'AbortError') {
+        if (value.cause !== undefined) return inner(value.cause);
+
+        return new CancellationError(undefined, { cause: value });
+      }
+
+      const cancellationError = unwrapCancellationError(value);
+      if (cancellationError) return cancellationError;
+
+      isCancellation = false;
+      return value;
+    }
     if (value === undefined) return;
     if (typeof value === 'string') return new CancellationError(value);
 
@@ -77,7 +90,10 @@ export function toError(value: unknown): Error {
   let error = inner(value);
   if (error) return error;
 
-  if (errors.size > 1) return new AggregateError(errors);
+  if (errors.size > 1)
+    return isCancellation ?
+        new CancellationError(undefined, { cause: new AggregateError(errors) })
+      : new AggregateError(errors);
 
   [error] = errors;
   return error ?? new CancellationError();
@@ -105,4 +121,12 @@ export function combineErrors(errors: Iterable<unknown>): unknown {
   }
 
   return new AggregateError(errorSet);
+}
+
+export function unwrapCancellationError(error: unknown): CancellationError | undefined {
+  while (true) {
+    if (error instanceof CancellationError) return error;
+    if (!(error instanceof Error)) return undefined;
+    error = error.cause;
+  }
 }

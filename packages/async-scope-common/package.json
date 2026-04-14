@@ -1,0 +1,14 @@
+{
+  "name": "@youngspe/async-scope-common",
+  "version": "0.1.0-dev.0",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "type": "module",
+  "files": [
+    "./dist",
+    "!**/*.map",
+    "!**/*.test.*"
+  ]
+}

@@ -1,10 +1,9 @@
 import { CancellationError } from './error.ts';
 import { Subscription } from './events/sub.js';
-import { whenAllSettled } from './join.ts';
 import type { ToScope } from './scope.ts';
 import type * as Symbols from './symbols.ts';
 import type { Awaitable, Falsy } from './types.ts';
-import { isArray } from './utils.ts';
+import { isArray, whenAllSettled } from '@youngspe/common-async-utils';
 
 export interface CancellableParent {}
 
@@ -15,12 +14,13 @@ export interface Cancellable {
   [Symbols.cancellableRemoved]?(key: CancellableParent): void;
 }
 
-export type CancellableLike =
+export type CancellableLike<Extra = never> =
   | Cancellable
   | Falsy
   | Disposable
   | AsyncDisposable
-  | readonly CancellableLike[];
+  | readonly CancellableLike<Extra>[]
+  | Extra;
 
 export type CancellationListener = (reason: Error) => Awaitable<void>;
 

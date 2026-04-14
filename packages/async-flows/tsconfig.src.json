@@ -1,0 +1,17 @@
+{
+  "extends": "@private/config/tsconfig",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "composite": true,
+    "lib": ["ESNext"],
+  },
+  "include": ["./src"],
+  "exclude": ["**/*.test.*"],
+  "references": [
+    { "path": "../async-scope/tsconfig.src.json" },
+    { "path": "../async-scope-common" },
+    { "path": "../async-iter-utils/tsconfig.src.json" },
+    { "path": "../common-async-utils/tsconfig.src.json" },
+  ],
+}

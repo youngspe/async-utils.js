@@ -17,14 +17,42 @@ type ExtractIterable<I> = I extends Iterable<infer X, infer Y, infer Z> ? Iterab
  * This is used in the predicate type of {@linkcode isIterable} to narrow a type down to
  * {@link Iterable} while preserving the most likely `yield`, `return`, and `next` types.
  */
-type AsIterable<I> = UnlessNeverElse<ExtractIterable<I>, Iterable<unknown, unknown, any>>;
+type AsIterable<I> =
+  Iterable<unknown, unknown, any> extends I ? Iterable<unknown, unknown, any> : ExtractIterable<I>;
 
-export function isIterable<T>(value: T | AsIterable<T> | null | undefined): value is AsIterable<T>;
+export function isIterable<T>(value: T | ExtractIterable<T> | null | undefined): value is AsIterable<T>;
 export function isIterable(value: any) {
   return typeof value?.[Symbol.iterator] === 'function';
 }
+/**
+ * Gets the base {@link Iterable} types for each constituent of union type `I` that is an iterable.
+ * Discards all non-iterable constituents.
+ *
+ * This is a helper for {@linkcode AsIterable}.
+ */
+type ExtractAsyncIterable<I> = I extends Iterable<infer X, infer Y, infer Z> ? Iterable<X, Y, Z> : never;
+
+/**
+ * If `I` or any of its union constituents extend {@link Iterable}, evaluates to the base iterable
+ * type of `I` or its constituents.
+ * Otherwise, evaluates to {@linkcode Iterable|Iterable<unknown, unknown, any>}.
+ *
+ * This is used in the predicate type of {@linkcode isIterable} to narrow a type down to
+ * {@link Iterable} while preserving the most likely `yield`, `return`, and `next` types.
+ */
+type AsAsyncIterable<I> = UnlessNeverElse<ExtractAsyncIterable<I>, AsyncIterable<unknown, unknown, any>>;
+
+export function isAsyncIterable<T>(
+  value: T | AsAsyncIterable<T> | null | undefined,
+): value is AsAsyncIterable<T>;
+export function isAsyncIterable(value: any) {
+  return typeof value?.[Symbol.asyncIterator] === 'function';
+}
 
 export function isPromiseLike<T>(value: Awaitable<T> | null | undefined): value is PromiseLike<T>;
+export function isPromiseLike(
+  value: Awaitable<NonNullable<unknown> | null | undefined>,
+): value is PromiseLike<unknown>;
 export function isPromiseLike(value: any) {
   return typeof value?.then === 'function';
 }
@@ -50,6 +78,7 @@ export function isAsyncDisposable(value: any) {
 type ExtractArray<I> =
   I extends Array<infer X> ? X[]
   : I extends ReadonlyArray<infer X> ? readonly X[]
+  : I extends Iterable<infer X> ? X[]
   : never;
 
 /**
@@ -60,10 +89,10 @@ type ExtractArray<I> =
  * This is used in the predicate type of {@linkcode isArray} to narrow a type down to {@link Array}
  * while preserving the most likely element type.
  */
-type AsArray<I> = UnlessNeverElse<ExtractArray<I>, unknown[]>;
+type AsArray<I> = unknown[] extends I ? unknown[] : ExtractArray<I>;
 
 interface IsArrayFunction {
-  <I>(value: I | AsArray<I> | null | undefined): value is AsArray<I>;
+  <I>(value: I | ExtractArray<I> | null | undefined): value is AsArray<I>;
 }
 
 /**

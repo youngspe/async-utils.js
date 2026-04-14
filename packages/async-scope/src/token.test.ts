@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 
 import { Token } from './token.ts';
-import { delay } from './timer.ts';
+import { delay } from './timers.ts';
 
 suite('CancelEvent', () => {
   useFakeTimers();
@@ -57,12 +57,12 @@ suite('CancelEvent', () => {
 
     const events: number[] = [];
 
-    token.add(
+    token.add([
       ...[3, 2, 5, 4, 1].map(i => async () => {
         await delay(i);
         events.push(i);
       }),
-    );
+    ]);
 
     const promise = ctrl.cancel();
     assert.deepEqual(events, []);

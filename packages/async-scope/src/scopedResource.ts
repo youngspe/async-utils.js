@@ -1,8 +1,7 @@
-import { joinPromises } from './join.ts';
+import { isAsyncDisposable, isDisposable, joinPromises } from '@youngspe/common-async-utils';
 import { Scope } from './scope.ts';
 import type { Token } from './token.ts';
 import type { Awaitable, Falsy } from './types.ts';
-import { isAsyncDisposable, isDisposable } from './utils.ts';
 
 export class ResourceError extends Error {
   static {

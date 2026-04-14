@@ -1,17 +1,7 @@
-/**
- * A value that yields `T` when awaited. Useful for functions that take either the value itself or a
- * promise that yields it.
- *
- * @template T The type of the value returned by `value` when awaited.
- *
- * @example
- * function asyncMultiply(lhs: Awaitable<number>, rhs: Awaitable<number>) {
- *   const [l, r] = await Promise.all([lhs, rhs]);
- *   return l * r;
- * }
- *
- */
-export type Awaitable<T> = T | Promise<T> | PromiseLike<T>;
+import type { OptionalUndefinedProps } from '@youngspe/common-async-utils';
+
+export type { Awaitable } from '@youngspe/async-scope-common';
+export type { OptionalUndefinedParams, OptionalUndefinedProps } from '@youngspe/common-async-utils';
 
 /**
  * A value that's treated like `false` in conditional operations like `if` or `&&`
@@ -43,80 +33,36 @@ export type Falsy = false | null | undefined | 0 | 0n | '';
 export type IfExactOptionalPropertiesEnabled<Then, Else> =
   { x: undefined } extends { x?: never } ? Else : Then;
 
-/** Evalutes to `Then` if `T` is `never`, otherwise `Else`. */
-type IfNever<T, Then, Else> =
-  | (T extends any ? Else : never)
-  | (Then & ([T] extends [never] ? unknown : never));
-
-/**
- * Evaluates to `never` if `T` is `never`, otherwise `U`.
- *
- * @example
- *
- * // This type may or may not contain an error value of type `E`:
- * type State<E> = Ready | Failed<E>;
- * type Ready = { status: 'ready', value: number }
- * // When `E` is `never`, `Failed<E>` is also never thanks to `OrNever<E>`:
- * type Failed<E> = { status: 'failed'; error: E } & OrNever<E>;
- *
- * // This means when `E` is `never`, the type `State<never>` evaluates to
- * // `Ready` to correctly reflect that it can never be in the `Failed` state.
- *
- * // Given a function with this signature:
- * function createState<E>(): State<E> {
- *   return { value: 0 }
- * }
- *
- * // The following operation is valid because we have specified there will
- * // never be an error:
- * const { value } = createState<never>();
- */
-export type OrNever<T, U = unknown> = IfNever<T, never, U>;
-
-/** Evaluates to `T`, unless `T` is never, in which case it evaluates to `Else`. */
-export type UnlessNeverElse<T, Else> = [T] extends [never] ? Else : T;
-
-type _OptionalUndefinedParams<A extends any[], R extends any[]> =
-  { [K in keyof R]: undefined } extends R ?
-    A extends [...infer L, ...R] ?
-      [...L, ...Partial<R>]
-    : A
-  : R extends [any, ...infer Rest] ? _OptionalUndefinedParams<A, Rest>
-  : A;
-
-export type OptionalUndefinedParams<A extends any[]> = _OptionalUndefinedParams<A, A>;
-
-type SimplifyObject<T> = { [K in keyof T]: T[K] };
-
-/**
- * Makes properties of `T` that may be `undefined` optional.
- * Useful for a params/options object for a function when a value might not be required depending
- * on the type parameters.
- *
- * @example
- *
- * interface MyParams<T, U> {
- *   items: T[]
- *   // This property may be undefined if a `T` is already a valid `U`, but
- *   // as-is you'll still need to include `transform: undefined` in your options.
- *   transform: ((value: T) => U) | (T extends U ? undefined : never);
- * }
- *
- * function myMap<T, U = T>({
- *   items,
- *   transform,
- * }: OptionalUndefinedProps<MyParams<T, U>>): U[] {
- *   return transform ? items.map(transform) : items as (T & U)[]
- * }
- *
- * const strings = myMap({
- *   items: [1, 2, 3],
- *   transform: String,
- * }); // ['1', '2', '3']
- *
- * // `transform` is not required because `T` and `U` are both `number`.
- * const unchanged = myMap({ items: [1, 2, 3] }); // [1, 2, 3]
- */
-export type OptionalUndefinedProps<T> = SimplifyObject<
-  Partial<T> & { [K in keyof T as undefined extends T[K] ? never : K]: T[K] }
+export type PartialOrUndefined<T> = IfExactOptionalPropertiesEnabled<
+  { [P in keyof T]?: T[P] | undefined },
+  Partial<T>
 >;
+
+type EraseProps<T> = { [K in keyof T]: any };
+
+export type Defined<T = unknown> = NonNullable<T> | (T & null);
+
+export type UpdateObject<T, U> =
+  T extends Partial<U> ? T & U
+  : U extends never ? never
+  : {
+      [K in keyof (EraseProps<T> & EraseProps<OptionalUndefinedProps<U>>)]: K extends keyof U ?
+        Extract<PropertyKey, K> extends never ?
+          Defined<U[K]> | (undefined extends U[K] ? T[K & keyof T] : never)
+        : T[K & keyof T] | U[K & keyof T]
+      : T[K & keyof T];
+    };
+
+export type SetProps<T, U> =
+  T extends Partial<U> ? T & U
+  : U extends never ? never
+  : U & {
+      [K in keyof T as Exclude<K, keyof (EraseProps<T> | EraseProps<U>)>]: U extends Record<K, any> ? U[K]
+      : U extends Partial<Record<K, infer X>> ? Extract<X, U[K]> | T[K & keyof T]
+      : T[K & keyof T];
+    };
+
+export type BetterOmit<T, K extends PropertyKey> =
+  T extends never ? never : { [_K in keyof T as Exclude<_K, K>]: T[_K] };
+
+export type UndefinedIfDefault<T, Def = object> = T | (Def extends T ? undefined : never);

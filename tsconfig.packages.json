@@ -4,7 +4,11 @@
   },
   "include": [],
   "references": [
-    {"path": "./packages/async-scope"},
-    {"path": "./packages/immediately-resolved"},
-  ]
+    { "path": "./packages/async-flows" },
+    { "path": "./packages/async-scope" },
+    { "path": "./packages/async-scope-common" },
+    { "path": "./packages/common-async-utils" },
+    { "path": "./packages/immediately-resolved" },
+    { "path": "./packages/node-exit-scope" },
+  ],
 }

@@ -1,0 +1,11 @@
+{
+  "extends": "@private/config/tsconfig",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "composite": true,
+  },
+  "include": ["./src"],
+  "exclude": ["**/*.test.*"],
+  "references": [{ "path": "../async-scope-common" }],
+}

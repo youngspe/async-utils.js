@@ -1,23 +1,37 @@
 import type { CancellableOptions } from './cancel.ts';
 import { Token } from './token.ts';
 
-interface Clock {
-  setTimeout: typeof globalThis.setTimeout;
-  setInterval: typeof globalThis.setInterval;
-  clearTimeout: typeof globalThis.clearTimeout;
-  clearInterval: typeof globalThis.clearInterval;
+declare const _timerId: unique symbol;
+
+interface _TimerId {
+  [_timerId]: typeof _timerId;
 }
 
-const GlobalClock: Clock = {
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+type TimerId = typeof globalThis extends { setTimeout(...args: any): infer X } ? X : _TimerId;
+
+type SetTimerFunction = <A extends any[] = []>(
+  action: (...args: A) => void,
+  ms: number,
+  ...args: A
+) => TimerId;
+
+type ClearTimerFunction = (id: TimerId | undefined) => void;
+
+export interface Clock {
+  setTimeout: SetTimerFunction;
+  setInterval: SetTimerFunction;
+  clearTimeout: ClearTimerFunction;
+  clearInterval: ClearTimerFunction;
+}
+
+export const GlobalClock: Clock = {
   setTimeout: (f, ...args) => globalThis.setTimeout(f, ...args),
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   setInterval: (f, ...args) => globalThis.setInterval(f, ...args),
   clearTimeout: id => globalThis.clearTimeout(id),
   clearInterval: id => globalThis.clearInterval(id),
 };
 
-interface TimerOptions extends CancellableOptions {
+export interface TimerOptions extends CancellableOptions {
   clock?: Clock | undefined;
 }
 

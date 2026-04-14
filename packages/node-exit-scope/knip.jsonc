@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": ["files", "exports", "nsExports", "dependencies"],
+  "node": true,
+  "entry": ["src/index.ts"],
+}

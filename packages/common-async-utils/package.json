@@ -1,0 +1,17 @@
+{
+  "name": "@youngspe/common-async-utils",
+  "version": "0.1.0-dev.0",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test \"./dist/**/*.test.js\""
+  },
+  "files": [
+    "./dist",
+    "!**/*.map",
+    "!**/*.test.*"
+  ]
+}

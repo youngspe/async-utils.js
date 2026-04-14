@@ -144,8 +144,11 @@ export abstract class Subscription {
   static fromLifecycle(
     this: void,
     lifecycle:
-      | (SubscriptionLifecycle<[], [first: boolean]> & { isActive?: ((this: void) => boolean) | undefined })
-      | (() => SubscriptionLifecycle.Initialized<[first: boolean]>)
+      | (SubscriptionLifecycle<[], [initializing: boolean]> & {
+          isActive?: ((this: void) => boolean) | undefined;
+          paused?: boolean | undefined;
+        })
+      | (() => SubscriptionLifecycle.Initialized<[initializing: boolean]>)
       | undefined,
   ): Subscription {
     if (!lifecycle) return Subscription.noop;
@@ -192,13 +195,18 @@ class LifecycleSubscription extends Subscription {
 
   constructor(
     lifecycle?:
-      | (SubscriptionLifecycle<[], [first: boolean]> & { isActive?: ((this: void) => boolean) | undefined })
+      | (SubscriptionLifecycle<[], [first: boolean]> & {
+          isActive?: ((this: void) => boolean) | undefined;
+          paused?: boolean | undefined;
+        })
       | (() => SubscriptionLifecycle.Initialized<[first: boolean]> | void),
   ) {
     super();
+    let paused = false;
 
     if (typeof lifecycle !== 'function') {
       this.#isActive = lifecycle?.isActive;
+      paused = lifecycle?.paused ?? false;
     }
 
     this.#lifecycle =
@@ -207,7 +215,9 @@ class LifecycleSubscription extends Subscription {
         typeof lifecycle === 'function' ? { init: lifecycle } : lifecycle,
       );
     this.#initialized = this.#lifecycle?.init();
-    this.#initialized?.resume(true);
+    if (!paused) {
+      this.#initialized?.resume(true);
+    }
   }
 
   override resume(): void {

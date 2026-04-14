@@ -3,8 +3,13 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "composite": true
+    "composite": true,
   },
   "include": ["./src"],
-  "exclude": ["**/*.test.*"]
+  "exclude": ["**/*.test.*"],
+  "references": [
+    { "path": "../async-scope-common" },
+    { "path": "../async-iter-utils/tsconfig.src.json" },
+    { "path": "../common-async-utils/tsconfig.src.json" },
+  ],
 }

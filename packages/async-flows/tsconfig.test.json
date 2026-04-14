@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.src.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "composite": false,
+  },
+  "include": ["./src/**/*.test.ts"],
+  "exclude": [],
+  "references": [{ "path": "../../internal/test-utils" }, { "path": "./tsconfig.src.json" }],
+}

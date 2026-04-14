@@ -1,27 +1,49 @@
 import { Token } from '../token.ts';
 import { Scope, STATIC_SCOPE, type ToScope, StandardScope } from '../scope.ts';
-import { isArray } from '../utils.ts';
 import { ScopedResources } from '../scopedResource.ts';
+import { isIterable } from '@youngspe/common-async-utils';
+import { ContextData } from './context.ts';
+import { CancellationTokenBase, ScopeBase } from '@youngspe/async-scope-common';
 
-export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Scope {
-  if (!src) return STATIC_SCOPE;
-  if (src instanceof Scope) return src;
-  if (src instanceof Token) return new StandardScope({ token: src, onError });
+function combineContextData(values: IterableIterator<ContextData>): ContextData | undefined {
+  const firstResult = values.next();
+  if (firstResult.done) return undefined;
+  const first = firstResult.value;
+
+  let builder;
+
+  for (const item of values) {
+    builder ??= first.builder();
+    builder.merge(item);
+  }
+
+  return builder?.finish() ?? first;
+}
+
+export function scopeFrom<V extends object = object>(
+  src: ToScope<V>,
+  onError?: (error: unknown) => void,
+): Scope<V> {
+  if (!src) return STATIC_SCOPE as Scope<V>;
+  if (src instanceof ScopeBase) return src;
+  if (src instanceof CancellationTokenBase) return new StandardScope({ token: src, onError });
   if (src instanceof AbortSignal) {
     return new StandardScope({ token: Token.fromAbortSignal(src, { onError }), onError });
   }
 
   let hasNonScopeToken = false;
-  const scopes = new Set<Scope>();
+  const scopes = new Set<Scope<Partial<V>>>();
   const tokens = new Set<Token>();
   const abortSignals = new Set<AbortSignal>();
   const resources = new Set<ScopedResources>();
+  const contextData = new Set<ContextData>();
 
-  function flatten(src: ToScope): Token | undefined {
-    if (!src) return;
+  function flatten(src: ToScope, includeScope: boolean): Token | undefined {
+    if (!src || typeof src !== 'object') return;
 
-    if (src instanceof Scope) {
+    if (src instanceof Scope && includeScope) {
       if (src.token.isCancelled) return src.token;
+      if (src === STATIC_SCOPE) return;
       scopes.add(src);
 
       if (!src.token.isDefused) {
@@ -30,6 +52,10 @@ export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Sco
 
       if (!src.resources.isEmpty) {
         resources.add(src.resources);
+      }
+
+      if (src.contextData !== ContextData.empty) {
+        contextData.add(src.contextData);
       }
 
       return;
@@ -52,18 +78,18 @@ export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Sco
       return;
     }
 
-    if (isArray(src) || src instanceof Set) {
+    if (isIterable(src)) {
       for (const child of src) {
-        const cancelled = flatten(child);
+        const cancelled = flatten(child, includeScope);
         if (cancelled) return cancelled;
       }
       return;
     }
 
-    return flatten(src.scope) || flatten(src.token) || flatten(src.signal);
+    return flatten(src.scope, true) || flatten(src.token, false) || flatten(src.signal, false);
   }
 
-  const cancelled = flatten(src);
+  const cancelled = flatten(src, true);
 
   if (!hasNonScopeToken && scopes.size <= 1) {
     // If only one scope was passed in with no other tokens, we can return the
@@ -73,7 +99,7 @@ export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Sco
     //
     const [scope] = scopes;
 
-    if (!cancelled || scope?.token === cancelled) return scope ?? Scope.static;
+    if (!cancelled || scope?.token === cancelled) return (scope ?? STATIC_SCOPE) as Scope<V>;
   }
 
   if (cancelled) return new StandardScope({ token: cancelled });
@@ -91,6 +117,7 @@ export function scopeFrom(src: ToScope, onError?: (error: unknown) => void): Sco
   return new StandardScope({
     token: Token.combine(tokens),
     resources: ScopedResources.combine(resources),
+    contextData: combineContextData(contextData.values()) as ContextData<V>,
     onError,
   });
 }

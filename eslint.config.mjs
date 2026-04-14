@@ -1,4 +1,4 @@
-import { defineConfig, globalIgnores } from 'eslint/config';
+import { defineConfig, globalIgnores } from '@eslint/config-helpers';
 import jseslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-plugin-prettier/recommended';

@@ -1,3 +1,5 @@
+import type { CancellableOptions } from '../cancel.ts';
+import { Token } from '../token.ts';
 import type { OptionalUndefinedProps } from '../types.ts';
 import { type SubscriptionLifecycle, SubscriptionLifecycleManager, Subscription } from './sub.ts';
 
@@ -5,14 +7,13 @@ export interface EventListenerKey {}
 
 export type MaybePromise<T, Async extends boolean> = T | (Async extends true ? Promise<T> : never);
 
-export type Awaitable<T> = T | Promise<T> | PromiseLike<T>;
-
 interface Handler<T, Ret> {
   key: EventListenerKey;
   listener?: ((this: void, value: T) => Ret) | undefined;
   dispose?: ((this: void) => void) | undefined;
   once: boolean;
   paused: boolean;
+  passive: boolean;
 }
 
 export interface ListenerSet<T, Ret> extends Disposable {
@@ -23,6 +24,8 @@ export interface ListenerSet<T, Ret> extends Disposable {
   callReversed(value: T): Generator<Ret, void, void>;
   popFront(): ((value: T) => Ret) | undefined;
   popBack(): ((value: T) => Ret) | undefined;
+  release(): void;
+  dispose(): void;
 }
 
 interface ListenerSetParams {
@@ -171,15 +174,14 @@ class ListenerSetImpl<T, Ret> implements ListenerSet<T, Ret> {
   }
 }
 
-export interface GenericEventController<
-  T,
-  Ret = void,
-  Async extends boolean = false,
-  Context = void,
-> extends Disposable {
-  readonly emitter: GenericEventEmitter<T, Ret>;
+export interface EventControllerLike<in T, out Ret = void, Async extends boolean = false> {
   readonly getListeners: (this: void) => MaybePromise<ListenerSet<T, Ret>, Async>;
   readonly dispose: (this: void) => void;
+}
+
+export interface GenericEventController<T, Ret = void, Async extends boolean = false, Context = void>
+  extends Disposable, EventControllerLike<T, Ret, Async> {
+  readonly emitter: GenericEventEmitter<T, Ret>;
   get context(): Context;
 }
 
@@ -235,9 +237,9 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
     if (!this.handlers) return 'disposed';
     if (this.handlers.has(handler.key)) return;
 
-    const { paused } = handler;
+    const { paused, passive } = handler;
 
-    if (!paused && this.#activeCount++ === 0) {
+    if (!passive && !paused && this.#activeCount++ === 0) {
       const args = this.#getLifecycleArgs();
       if (!args) return;
       this.#lifecycle.init(...args).resume(...args);
@@ -253,11 +255,11 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
     if (!handler) return false;
     this.handlers.delete(key);
 
-    const { paused } = handler;
+    const { paused, passive } = handler;
 
     handler.dispose?.();
 
-    if (!paused && --this.#activeCount === 0) {
+    if (!passive && !paused && --this.#activeCount === 0) {
       this.#lifecycle.pause();
     }
 
@@ -267,10 +269,10 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
   resumeHandler(key: EventListenerKey) {
     const handler = this.handlers?.get(key);
     if (!handler) return;
-    const { paused } = handler;
+    const { paused, passive } = handler;
     handler.paused = false;
 
-    if (paused && this.#activeCount++ === 0) {
+    if (!passive && paused && this.#activeCount++ === 0) {
       const args = this.#getLifecycleArgs();
       if (!args) return;
 
@@ -281,10 +283,10 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
   pauseHandler(key: EventListenerKey) {
     const handler = this.handlers?.get(key);
     if (!handler) return;
-    const { paused } = handler;
+    const { paused, passive } = handler;
     handler.paused = true;
 
-    if (!paused && --this.#activeCount === 0) {
+    if (!passive && !paused && --this.#activeCount === 0) {
       this.#lifecycle.pause();
     }
   }
@@ -309,28 +311,56 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
   }
 }
 
-export interface AddListenerOptions {
-  signal?: AbortSignal | undefined;
+export interface AddListenerOptions extends CancellableOptions {
   once?: boolean | undefined;
   key?: EventListenerKey | undefined;
   onRemove?: (() => void) | undefined;
+  paused?: boolean | undefined;
+  /** If `true`, this listener will not keep the event source from pausing. */
+  passive?: boolean | undefined;
 }
 
-export class GenericEventEmitter<T, Ret = void> {
+export abstract class GenericEventEmitter<out T, in Ret = void> {
+  abstract get isDisposed(): boolean;
+
+  abstract add(listener: (this: void, value: T) => Ret, options?: AddListenerOptions): Subscription;
+
+  abstract has(key: EventListenerKey | undefined | null): boolean;
+
+  abstract remove(key: EventListenerKey | undefined | null): boolean;
+
+  static createController<T, Ret = void, Async extends boolean = false, Context = undefined>(
+    this: void,
+    params: GenericEventEmitterParams<T, Ret, Async, Context>,
+  ): GenericEventController<T, Ret, Async, Context> {
+    return DefaultGenericEventEmitter._createController(params);
+  }
+
+  static create<T, Ret = void, Async extends boolean = false, Context = undefined>(
+    this: void,
+    params: GenericEventEmitterParams<T, Ret, Async, Context>,
+  ): GenericEventEmitter<T, Ret> {
+    return DefaultGenericEventEmitter._create(params);
+  }
+}
+
+class DefaultGenericEventEmitter<T, Ret = void> extends GenericEventEmitter<T, Ret> {
   #state;
 
   private constructor(state: WeakRef<GenericEventEmitterState<T, Ret, boolean, any>> | undefined) {
+    super();
     this.#state = state;
   }
 
-  get isDisposed() {
+  override get isDisposed() {
     return !this.#state?.deref()?.handlers;
   }
 
-  add(listener: (this: void, value: T) => Ret, options?: AddListenerOptions): Subscription {
-    const { signal, onRemove, once = false } = options ?? {};
+  override add(listener: (this: void, value: T) => Ret, options?: AddListenerOptions): Subscription {
+    const { onRemove, once = false, paused = false, passive = false } = options ?? {};
 
-    if (signal?.aborted) return Subscription.noop;
+    const token = Token.from(options);
+    if (token?.isCancelled) return Subscription.noop;
 
     let _state = this.#state;
     const state = _state?.deref();
@@ -342,12 +372,12 @@ export class GenericEventEmitter<T, Ret = void> {
 
     const key = options?.key ?? {};
 
-    const handler: Handler<T, Ret> = { key, listener, once, paused: false };
+    const handler: Handler<T, Ret> = { key, listener, once, paused, passive };
 
     const sub = Subscription.fromLifecycle({
       init: () => ({
-        resume: first => {
-          if (!first) {
+        resume: initializing => {
+          if (!initializing) {
             _state?.deref()?.resumeHandler(key);
           }
 
@@ -360,26 +390,25 @@ export class GenericEventEmitter<T, Ret = void> {
         s?.deref()?.removeHandler(key);
       },
       isActive: () => !!_state?.deref()?.handlers?.has(key),
+      paused,
     });
 
-    let removeSignal = undefined;
+    let tokenSub = token?.isDefused === false ? token.add(sub) : undefined;
 
-    if (signal) {
-      const onAbort = () => sub.dispose();
-      signal.addEventListener('abort', onAbort, { once: true });
-      removeSignal = () => signal.removeEventListener('abort', onAbort);
+    if (!tokenSub?.isActive) {
+      tokenSub = undefined;
     }
 
     handler.dispose =
-      onRemove && removeSignal ?
+      onRemove && tokenSub ?
         () => {
           try {
-            removeSignal();
+            tokenSub.dispose();
           } finally {
             onRemove();
           }
         }
-      : onRemove || removeSignal;
+      : onRemove || tokenSub?.dispose.bind(tokenSub);
 
     state.addHandler(handler);
 
@@ -415,7 +444,7 @@ export class GenericEventEmitter<T, Ret = void> {
       this.#isAsync = isAsync ?? (false as Async);
       this.#state = new GenericEventEmitterState(lifecycle);
       this.#state.controller = new WeakRef(this);
-      this.emitter = new GenericEventEmitter(new WeakRef(this.#state));
+      this.emitter = new DefaultGenericEventEmitter(new WeakRef(this.#state));
       this.#getContext = context;
 
       controllerFinalizationRegistry.register(this, this.#state, this.#state);
@@ -471,17 +500,17 @@ export class GenericEventEmitter<T, Ret = void> {
     }
   };
 
-  static createController<T, Ret = void, Async extends boolean = false, Context = void>(
+  static _createController<T, Ret = void, Async extends boolean = false, Context = undefined>(
     this: void,
     params: GenericEventEmitterParams<T, Ret, Async, Context>,
   ): GenericEventController<T, Ret, Async, Context> {
-    return new GenericEventEmitter.#Controller(params);
+    return new DefaultGenericEventEmitter.#Controller(params);
   }
 
-  static create<T, Ret = void, Async extends boolean = false>(
+  static _create<T, Ret = void, Async extends boolean = false, Context = undefined>(
     this: void,
-    params: GenericEventEmitterParams<T, Ret, Async>,
-  ) {
-    return GenericEventEmitter.createController(params).emitter;
+    params: GenericEventEmitterParams<T, Ret, Async, Context>,
+  ): GenericEventEmitter<T, Ret> {
+    return DefaultGenericEventEmitter.createController(params).emitter;
   }
 }
