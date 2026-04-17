@@ -22,3 +22,5 @@ export { StateFlow, type StateFlowController } from './flow/state.ts';
 export { zipFlows, combineLatest } from './flow/zip.ts';
 export { ChainFlow } from './flow/chain.ts';
 export { DeferredFlow } from './flow/deferred.ts';
+export { flowFromAsyncEvent, flowFromEvent } from './flow/event.ts';
+export { sharedFlow } from './flow/shared.ts';

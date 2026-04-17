@@ -134,9 +134,9 @@ export abstract class AbstractFlow<T, TReturn, TNext> extends Flow<T, TReturn, T
             try {
               out = await ControlFlow.fromAsync(
                 handler(
-                  Scope.from([innerScope, providedScope, handlerController])
-                    .withContextData(b => b.values({ value: _value }))
-                    .getContext(),
+                  Scope.from([innerScope, providedScope, handlerController]).getContext({
+                    values: { value: _value },
+                  }),
                 ),
               );
             } catch (error) {
@@ -180,7 +180,7 @@ export abstract class AbstractFlow<T, TReturn, TNext> extends Flow<T, TReturn, T
           (async () => {
             try {
               const out = await this._each(
-                innerScope.withContextData(b => b.values({ emit, emitScoped, emitAll })).getContext(),
+                innerScope.getContext({ values: { emit, emitScoped, emitAll } }),
               );
               await controller.cancel(new FlowComplete());
               if (breakout) return breakout;

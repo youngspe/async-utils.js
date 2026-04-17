@@ -1,12 +1,7 @@
 import { joinPromises } from '@youngspe/common-async-utils';
 
 import { cancelObject, type CancellableOrDisposable, type CancellableParent } from '../cancel.ts';
-import {
-  CancellationError,
-  combineErrors,
-  toErrorForCancellation,
-  unwrapCancellationError,
-} from '../error.ts';
+import { toErrorForCancellation } from '../error.ts';
 import * as Symbols from '../symbols.ts';
 import { Token, type TokenController } from '../token.ts';
 import type { Awaitable, Falsy } from '../types.ts';
@@ -16,23 +11,61 @@ import type { AddCancellableOptions } from '../token/base.ts';
 
 export class CancelEvent extends Token {
   #inner;
-  #error: Error | undefined;
-  #key: object = {};
+  #key: { error: Error | undefined } = { error: undefined };
+  #pollError;
+  #defused = false;
 
-  constructor(inner: GenericEventEmitter<Error, Awaitable<void>>) {
+  constructor(
+    inner: GenericEventEmitter<Error, Awaitable<void>>,
+    pollError?: (this: void) => Error | 'defused' | undefined,
+  ) {
     super();
     this.#inner = inner;
+    this.#pollError = pollError;
   }
 
   override get error(): Error | undefined {
-    return this.#error;
+    if (this.#key.error) return this.#key.error;
+
+    if (this.#pollError) {
+      const error = this.#pollError();
+
+      if (!error) return undefined;
+
+      this.#pollError = undefined;
+
+      if (error === 'defused') {
+        this.#defused = true;
+        return undefined;
+      }
+
+      return (this.#key.error = error);
+    }
+
+    return undefined;
+  }
+
+  override get isDefused() {
+    if (this.#defused) return true;
+
+    if (this.#pollError) {
+      const error = this.#pollError();
+      if (!error) return false;
+      this.#pollError = undefined;
+
+      if (error === 'defused') return (this.#defused = true);
+
+      this.#key.error ??= error;
+    }
+
+    return false;
   }
 
   protected override addOne(
     listener: CancellableOrDisposable,
     { paused, passive }: AddCancellableOptions = {},
   ): Subscription | undefined {
-    if (this.#error) return undefined;
+    if (this.#key.error) return undefined;
 
     const sub = this.#inner.add(e => cancelObject(listener, e), {
       once: true,
@@ -63,10 +96,11 @@ export class CancelEvent extends Token {
       callbacks: Token.Callbacks,
       sealed: boolean,
       filter: ((error: Error) => true | Error | Falsy | 'defuse') | undefined,
+      pollError: ((this: void) => Error | 'defused' | undefined) | undefined,
     ) {
       this.#inner = inner;
       this.#callbacks = callbacks;
-      this.token = new CancelEvent(inner.emitter);
+      this.token = new CancelEvent(inner.emitter, pollError);
       this.#sealed = sealed;
       this.#filter = filter;
     }
@@ -92,7 +126,8 @@ export class CancelEvent extends Token {
       }
 
       return (this.#promise ??= (async () => {
-        this.token.#error = error;
+        this.token.#key.error = error;
+        this.token.#pollError = undefined;
         const callbacks = this.#callbacks;
 
         const { onBeforeCancel, onAfterCancel } = callbacks;
@@ -119,11 +154,17 @@ export class CancelEvent extends Token {
           errors.add(e);
         }
 
+        this.#inner.dispose();
         if (errors.size) throw toErrorForCancellation(errors);
       })());
     };
     readonly defuse = () => {
-      this.#filter = undefined;
+      if (this.token.#defused) return;
+
+      if (!this.token.#key.error) {
+        this.token.#defused = true;
+      }
+      this.#filter = this.token.#pollError = undefined;
       this.#promise ??= Promise.resolve();
       this.#inner.dispose();
     };
@@ -135,7 +176,21 @@ export class CancelEvent extends Token {
     };
     [Symbols.cancellableRemoved] = (key: CancellableParent) => {
       const removed = this.#parentSubs.delete(key);
-      if (removed && this.#sealed && this.#parentSubs.size === 0) {
+      if (!removed) return;
+
+      let shouldDefuse = this.#sealed && this.#parentSubs.size === 0;
+
+      if (key.error) {
+        // If there was an error but all listeners are currently paused, defuse because we won't
+        if (!this.token.#key.error && !this.#inner.isActive()) {
+          shouldDefuse = true;
+        }
+
+        this.token.#key.error = key.error;
+        this.token.#pollError = this.#filter = undefined;
+      }
+
+      if (shouldDefuse) {
         this.defuse();
       }
     };
@@ -149,12 +204,14 @@ export class CancelEvent extends Token {
       dispose,
       sealed = false,
       filter,
+      pollError,
     }: Token.CreateParams): GenericEventController<Error, Awaitable<void>, false, Controller> {
       const callbacks = { onBeforeCancel, onAfterCancel, onDefuse };
 
       return GenericEventEmitter.createController({
-        context: ctrl => new CancelEvent.#Controller(ctrl, callbacks, sealed, filter),
+        context: ctrl => new CancelEvent.#Controller(ctrl, callbacks, sealed, filter, pollError),
         init: ({ context }) => {
+          context.token.#pollError = undefined;
           const parents = context.#parentSubs;
           const _init = init?.(context);
           return {

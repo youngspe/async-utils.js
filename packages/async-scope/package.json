@@ -1,6 +1,6 @@
 {
   "name": "@youngspe/async-scope",
-  "version": "0.1.0-dev.1",
+  "version": "0.1.0-dev.2",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",

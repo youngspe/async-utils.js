@@ -6,7 +6,7 @@ import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 import { Token } from './token.ts';
 import { delay } from './timers.ts';
 
-suite('CancelEvent', () => {
+suite('Token', () => {
   useFakeTimers();
 
   test('a listener is called on cancel', async () => {
@@ -68,5 +68,55 @@ suite('CancelEvent', () => {
     assert.deepEqual(events, []);
     await promise;
     assert.deepEqual(events, [1, 2, 3, 4, 5]);
+  });
+
+  suite('combined tokens', () => {
+    test('a listener is called after one token is cancelled', async () => {
+      const ctrl1 = Token.createController();
+      const ctrl2 = Token.createController();
+
+      const token = Token.from([ctrl1, ctrl2]);
+
+      const listener = mock.fn<(error: Error) => void>();
+      token.add(listener);
+
+      const err = new Error();
+
+      await ctrl1.cancel(err);
+
+      assert.equal(listener.mock.callCount(), 1);
+      assert.equal(listener.mock.calls[0]?.arguments.length, 1);
+      assert.equal(listener.mock.calls[0].arguments[0], err);
+    });
+    suite('a child token is defused when all its parents are defused', () => {
+      test('before any listeners are added', async () => {
+        const ctrl1 = Token.createController();
+        const ctrl2 = Token.createController();
+
+        const token = Token.from([ctrl1, ctrl2]);
+
+        assert.equal(token.isDefused, false);
+        ctrl1.defuse();
+        assert.equal(token.isDefused, false);
+        ctrl2.defuse();
+        assert.equal(token.isDefused, true);
+      });
+
+      test('after listeners are added', async () => {
+        const ctrl1 = Token.createController();
+        const ctrl2 = Token.createController();
+
+        const token = Token.from([ctrl1, ctrl2]);
+
+        token.add(() => assert.fail());
+        token.add(() => assert.fail());
+
+        assert.equal(token.isDefused, false);
+        ctrl1.defuse();
+        assert.equal(token.isDefused, false);
+        ctrl2.defuse();
+        assert.equal(token.isDefused, true);
+      });
+    });
   });
 });

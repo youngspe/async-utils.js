@@ -1,7 +1,7 @@
 import type { ScopeContext } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 
-import { Flow, toFlowAsync, type FlowExecutorContext, type ToFlow } from '../../flow.ts';
+import { Flow, type FlowExecutorContext, type ToFlow } from '../../flow.ts';
 import { type FlowTransformer } from './module.ts';
 import type { Defined } from '../../types.ts';
 
@@ -67,15 +67,11 @@ export const flat =
     UNext
   > =>
   src =>
-    src.transformEach(async ({ value, emitScoped, scope }) =>
-      (await toFlowAsync(value)).each(emitScoped, { scope }),
-    );
+    src.transformEach(async ({ value, emitAll }) => emitAll(value));
 
 export const flatMap =
   <T, TReturn, TNext, U, UNext>(
     fn: (value: T) => ToFlow<U, TNext, UNext>,
   ): FlowTransformer<Flow<T, TReturn, TNext>, U, TReturn, UNext> =>
   src =>
-    src.transformEach(async ({ value, emitScoped, scope }) =>
-      (await toFlowAsync(fn(value))).each(emitScoped, { scope }),
-    );
+    src.transformEach(async ({ value, emitAll }) => emitAll(fn(value)));

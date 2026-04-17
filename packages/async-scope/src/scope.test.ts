@@ -26,12 +26,10 @@ suite('Scope', () => {
 
         const ctrl = Token.createController();
 
-        const scope = Scope.from(ctrl);
-
         await Promise.all([
           delay(5).then(() => ctrl.cancel(error)),
           assert.rejects(
-            () => scope.launch(async () => delay(10).then(() => 'foo'), { token: ctrl.token }),
+            () => Scope.static.launch(async () => delay(10).then(() => 'foo'), { token: ctrl.token }),
             error,
           ),
         ]);
@@ -93,6 +91,29 @@ suite('Scope', () => {
 
       assert.equal(clock().now, 13);
       assert.deepEqual(events, [7, 5, 6]);
+    });
+  });
+
+  suite('#launchAll', () => {
+    test('with an object of tasks', async ({ signal }) => {
+      const scope = Scope.from(signal);
+
+      const out = await scope.launchAll({
+        foo: async ({ scope }) => {
+          await scope.delay(100);
+          return 1;
+        },
+        bar: async ({ scope }) => {
+          await scope.delay(300);
+          return 2;
+        },
+        baz: async ({ scope }) => {
+          await scope.delay(200);
+          return 3;
+        },
+      });
+
+      assert.deepEqual(out, { foo: 1, bar: 2, baz: 3 });
     });
   });
 });

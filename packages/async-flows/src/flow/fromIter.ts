@@ -59,7 +59,7 @@ export class FlowFromIter<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
       try {
         handlerResult = await ControlFlow.fromAsync(
           scope.resolveOrCancel(
-            handler(Scope.from([scope, ctrl]).withContextValues({ value: result.value }).getContext()),
+            handler(Scope.from([scope, ctrl]).getContext({ values: { value: result.value } })),
           ),
         );
       } catch (error) {

@@ -1,3 +1,4 @@
-import { ResourceKey } from "./scopedResource.ts";
+import { ResourceKey } from './scopedResource.ts';
+import type { Clock } from './timers.ts';
 
-export const clock = ResourceKey.create("clock");
+export const clock = ResourceKey.create<Clock>('clock');

@@ -1,5 +1,3 @@
-import type { OptionalUndefinedProps } from '@youngspe/common-async-utils';
-
 export type { Awaitable } from '@youngspe/async-scope-common';
 export type { OptionalUndefinedParams, OptionalUndefinedProps } from '@youngspe/common-async-utils';
 
@@ -42,14 +40,25 @@ type EraseProps<T> = { [K in keyof T]: any };
 
 export type Defined<T = unknown> = NonNullable<T> | (T & null);
 
+type Simplify<T> = { [K in keyof T]: T[K] };
+
+export type RemoveUndefinedProps<T> =
+  T extends object ?
+    undefined extends T[keyof T] ?
+      Simplify<
+        { [K in keyof T as undefined extends T[K] ? never : K]: T[K] } & { [K in keyof T]?: Defined<T[K]> }
+      >
+    : T
+  : T;
+
 export type UpdateObject<T, U> =
-  T extends Partial<U> ? T & U
+  T extends Partial<U> ? T & RemoveUndefinedProps<U>
   : U extends never ? never
   : {
-      [K in keyof (EraseProps<T> & EraseProps<OptionalUndefinedProps<U>>)]: K extends keyof U ?
+      [K in keyof (EraseProps<T> & EraseProps<RemoveUndefinedProps<U>>)]: K extends keyof U ?
         Extract<PropertyKey, K> extends never ?
           Defined<U[K]> | (undefined extends U[K] ? T[K & keyof T] : never)
-        : T[K & keyof T] | U[K & keyof T]
+        : T[K & keyof T] | U[K]
       : T[K & keyof T];
     };
 

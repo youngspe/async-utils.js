@@ -180,14 +180,16 @@ export abstract class Flow<out T, out TReturn = unknown, in TNext = void> {
   ): Flow<U, ControlFlow<B, TReturn>, UNext> {
     return defineFlow(({ emitScoped, emitAll, scope }) =>
       this.tryEach(
-        ({ scope }) =>
+        ({ scope, value }) =>
           fn(
             scope.getContext({
               values: {
+                value,
                 emit: (value, ...args) => emitScoped({ value, scope }, ...args),
-                emitScoped: (cx, ...args) => emitScoped({ ...cx, scope: [scope, cx.scope] }, ...args),
+                emitScoped: (cx, ...args) =>
+                  emitScoped({ value: cx.value, scope: [scope, cx.scope] }, ...args),
                 emitAll: (src, opts) => emitAll(src, { ...opts, scope: [scope, opts?.scope] }),
-              } satisfies FlowExecutorContext<U, UNext>,
+              } satisfies FlowExecutorContext<U, UNext> & { value: T },
             }),
           ),
         { scope },
@@ -200,14 +202,15 @@ export abstract class Flow<out T, out TReturn = unknown, in TNext = void> {
   ): Flow<U, TReturn, UNext> {
     return defineFlow(({ emitScoped, emitAll, scope }) =>
       this.each(
-        ({ scope }) =>
+        ({ scope, value }) =>
           fn(
             scope.getContext({
               values: {
+                value,
                 emit: (value, ...args) => emitScoped({ value, scope }, ...args),
                 emitScoped: (cx, ...args) => emitScoped({ ...cx, scope: [scope, cx.scope] }, ...args),
                 emitAll: (src, opts) => emitAll(src, { ...opts, scope: [scope, opts?.scope] }),
-              } satisfies FlowExecutorContext<U, UNext>,
+              } satisfies FlowExecutorContext<U, UNext> & { value: T },
             }),
           ),
         { scope },

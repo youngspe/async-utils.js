@@ -15,6 +15,13 @@ export type FlowTransformer<
   in UNext = never,
 > = FlowOperator<A, Flow<U, UReturn, UNext>>;
 
+export type FlowInspector<in out T, in out TReturn, in out TNext> = FlowTransformer<
+  Flow<T, TReturn, TNext>,
+  T,
+  TReturn,
+  TNext
+>;
+
 export type FlowCollector<in A extends AnyFlow = Flow<never, never, any>, out B = unknown> = FlowOperator<
   A,
   Promise<B>
@@ -265,3 +272,5 @@ export function pipeThis(this: AnyFlow, ...ops: FlowOperator<AnyFlow, unknown>[]
 export type AsyncPredicate<A extends readonly unknown[]> = (
   ...args: A
 ) => Awaitable<true | NonNullable<unknown> | Falsy>;
+
+export const ident = <T>(value: T): T => value;

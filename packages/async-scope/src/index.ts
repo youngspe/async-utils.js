@@ -3,7 +3,8 @@ export {
   Scope,
   type CommonScopeOptions,
   type ScopeContext,
-  type ScopeRunOptions,
+  type ScopeLaunchOptions as ScopeLaunchOptions,
+  type TaskFunction,
   type ToScope,
 } from './scope.ts';
 export {

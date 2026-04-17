@@ -4,6 +4,7 @@ export { StandardScope } from './scope/standard.ts';
 export type {
   CommonScopeOptions,
   ScopeContext,
-  ScopeLaunchOptions as ScopeRunOptions,
+  ScopeLaunchOptions,
+  TaskFunction,
   ToScope,
 } from './scope/base.ts';

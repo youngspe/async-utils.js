@@ -1,6 +1,6 @@
 {
   "name": "@youngspe/async-flows",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.2",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
@@ -8,7 +8,7 @@
   },
   "type": "module",
   "scripts": {
-    "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test \"./dist/**/*.test.js\""
+    "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test-timeout=3000 --test \"./dist/**/*.test.js\""
   },
   "dependencies": {
     "@youngspe/async-iter-utils": "workspace:",

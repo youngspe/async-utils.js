@@ -75,14 +75,20 @@ export function failedFlow(this: void, error: unknown): Flow<never, never, unkno
   return new CancelledFlow(error);
 }
 
-export function emptyFlow<TReturn>(this: void, value?: TReturn): Flow<never, TReturn, unknown> {
-  return new EmptyFlow(value as TReturn);
+export function emptyFlow(this: void): Flow<never, undefined, unknown>;
+export function emptyFlow<TReturn>(this: void, value: TReturn): Flow<never, TReturn, unknown>;
+export function emptyFlow<TReturn>(this: void, value?: TReturn): Flow<never, TReturn | undefined, unknown>;
+export function emptyFlow<TReturn>(this: void, value?: TReturn): Flow<never, TReturn | undefined, unknown> {
+  return new EmptyFlow(value);
 }
 export function flowOf<T>(...values: T[]): Flow<T, undefined, unknown>;
 export function flowOf<A extends T[], T = A[number]>(...values: A): Flow<T, undefined, unknown>;
 export function flowOf<T>(...values: T[]): Flow<T, undefined, unknown> {
   return iterToFlow(values);
 }
+
+export const neverFlow = <T = never, TReturn = never, TNext = unknown>(): Flow<T, TReturn, TNext> =>
+  new NeverFlow();
 
 export function defineFlow<T, TReturn = undefined, TNext = unknown>(
   fn: FlowExecutor<T, TReturn, TNext>,
@@ -118,6 +124,37 @@ class CancelledFlow extends Flow<never, never, unknown> {
 
   override values(): AsyncIterableIterator<never, never, unknown> {
     return throwingAsyncIterator(this.#error);
+  }
+}
+
+export const NEVER_PROMISE: Promise<never> = (() => {
+  const promise = new Promise<never>(() => undefined);
+  void Object.assign(promise, { then: () => promise, catch: () => promise, finally: () => promise });
+  return promise;
+})();
+
+export const NEVER_ITER: AsyncIterableIterator<never, never, unknown> = Object.freeze({
+  next: () => NEVER_PROMISE,
+  [Symbol.asyncIterator]() {
+    return this;
+  },
+});
+
+class NeverFlow extends Flow<never, never, unknown> {
+  override tryEach() {
+    return NEVER_PROMISE;
+  }
+
+  override each() {
+    return NEVER_PROMISE;
+  }
+
+  override iter() {
+    return NEVER_ITER;
+  }
+
+  override values() {
+    return NEVER_ITER;
   }
 }
 
@@ -165,7 +202,7 @@ class ConstantFlow<T> extends Flow<T, undefined, unknown> {
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, undefined>> {
     const ret = await ControlFlow.fromAsync(
-      handler(Scope.from(options).withContextValues({ value: this.#value }).getContext()),
+      handler(Scope.from(options).getContext({ values: { value: this.#value } })),
     );
 
     if ('continue' in ret) return ControlFlow.CONTINUE;
@@ -176,7 +213,7 @@ class ConstantFlow<T> extends Flow<T, undefined, unknown> {
     handler: (cx: ScopeContext<{ value: T }>) => unknown,
     options?: CancellableOptions,
   ): Promise<undefined> {
-    await handler(Scope.from(options).withContextValues({ value: this.#value }).getContext());
+    await handler(Scope.from(options).getContext({ values: { value: this.#value } }));
   }
 
   override values(options?: CancellableOptions) {

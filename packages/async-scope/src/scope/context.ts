@@ -2,7 +2,9 @@ import type { Defined, SetProps, UpdateObject } from '../types.ts';
 import type { ScopeContext, ScopeContextBase } from './base.ts';
 
 type Descriptors<V extends object> = {
-  [K in keyof V]: { value: Defined<V[K]> } | { get(this: ScopeContext<V>): V[K] };
+  [K in keyof V]:
+    | { value: Defined<V[K]>; enumerable: boolean; writable: boolean }
+    | { get(this: ScopeContext<V>): V[K] };
 };
 
 const contextProps: { [_ in keyof ScopeContext]: undefined } = {
@@ -19,7 +21,7 @@ export class ContextData<V extends object = object> {
     this.#descriptors = descriptors;
   }
 
-  updateContext(target: ScopeContextBase<V>): ScopeContext<V> {
+  updateContext<VBase extends object>(target: ScopeContextBase<VBase>): ScopeContext<V, VBase> {
     if (this.#descriptors) {
       const descriptors = this.#descriptors as Descriptors<{ [k: string | symbol]: unknown }>;
 
@@ -30,7 +32,7 @@ export class ContextData<V extends object = object> {
       }
     }
 
-    return target as ScopeContext<V>;
+    return target as ScopeContext<V, VBase>;
   }
 
   builder(): ContextDataBuilder<V> {
@@ -59,10 +61,10 @@ export class ContextData<V extends object = object> {
       for (const key of [...Object.keys(props), ...Object.getOwnPropertySymbols(props)]) {
         const value = props[key];
         if (value === undefined) continue;
-        descriptors[key] = { value };
+        descriptors[key] = { value, enumerable: true, writable: false };
       }
 
-      return this as ContextDataBuilder<V | V2> as ContextDataBuilder<UpdateObject<V, V2>>;
+      return this as ContextDataBuilder<any> as ContextDataBuilder<UpdateObject<V, V2>>;
     }
 
     getters<V2 extends object>(getters: {

@@ -214,11 +214,23 @@ export abstract class Token extends CancellationTokenBase {
       tokens.add(item);
     }
 
+    const pollError = () => {
+      for (const token of tokens) {
+        const { error } = token;
+        if (error) return error;
+        if (token.isDefused) {
+          tokens.delete(token);
+        }
+      }
+
+      return tokens.size ? undefined : 'defused';
+    };
+
     if (tokens.size > 1) {
       return Token.create({
         sealed: true,
         init: ctrl => {
-          const sub = Subscription.collect(Array.from(tokens, t => t.add(ctrl, { passive: true })));
+          const sub = Subscription.collect(Array.from(tokens, t => t.add(ctrl)));
           return {
             resume: () => {
               sub.resume();
@@ -229,6 +241,7 @@ export abstract class Token extends CancellationTokenBase {
             },
           };
         },
+        pollError,
       });
     }
 
@@ -245,15 +258,23 @@ export abstract class Token extends CancellationTokenBase {
     return Token.create({
       ...callbacks,
       init: ({ cancel }) => {
-        const onAbort = () => void cancel(signal.reason).catch(onError);
-        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) return;
 
         return {
-          close: () => {
-            signal.removeEventListener('abort', onAbort);
+          resume: () => {
+            if (signal.aborted) return;
+            const onAbort = () => void cancel(signal.reason).catch(onError);
+            signal.addEventListener('abort', onAbort, { once: true });
+
+            return {
+              pause: () => {
+                signal.removeEventListener('abort', onAbort);
+              },
+            };
           },
         };
       },
+      pollError: () => (signal.aborted ? toErrorForCancellation(signal.reason) : undefined),
     });
   }
 
@@ -342,13 +363,31 @@ export namespace Token {
 
   export interface CreateParams
     extends SubscriptionLifecycle<[ctrl: TokenController], [ctrl: TokenController]>, Callbacks {
+    /**
+     * If provided, this function is called on an attempt to cancel the token.
+     *
+     * If the function returns:
+     * - a falsy value, the token is unaffected.
+     * - `true`, the token is cancelled normally.
+     * - `'defuse'`, the token is defused instead of cancelled.
+     */
     filter?: ErrorFilter;
     /**
-     * If `true`, then when all parent tokens are defused, the token will be defused.
+     * If `true`, then when all parent tokens are defused or removed, the token will be defused.
      *
      * @default false
      */
     sealed?: boolean | undefined;
+    /**
+     * If this function is provided and returns an `Error`, indicates that the token is cancelled
+     * with that error.
+     *
+     * If this function returns `'defused'`, indicates that the token has already been defused.
+     *
+     * This is only used before any listeners are added. Once the first listener is added, this
+     * function is discarded.
+     */
+    pollError?: ((this: void) => Error | 'defused' | undefined) | undefined;
   }
 
   export interface FromAbortSignalParams extends Callbacks {

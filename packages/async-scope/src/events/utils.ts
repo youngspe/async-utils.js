@@ -2,7 +2,6 @@ import { isPromiseLike } from '@youngspe/common-async-utils';
 import type { CancellableOptions } from '../cancel.ts';
 import { GenericEventEmitter, type AddListenerOptions } from '../events.ts';
 import { Scope, type ScopeContext } from '../scope.ts';
-import { Token } from '../token.ts';
 import type { Awaitable, OptionalUndefinedParams, UndefinedIfDefault } from '../types.ts';
 
 type OnNextEventListenerReturn<U, Ret> = UndefinedIfDefault<
@@ -53,7 +52,7 @@ export async function onNextEvent<T, Ret, U, UCancel = never>(
           try {
             _sub?.dispose();
             onDispose = undefined;
-            const result = listener(scope.withContextValues({ value }).getContext());
+            const result = listener(scope.getContext({ values: { value } }));
             if (isPromiseLike(result))
               return Promise.resolve(
                 result.then(args => {

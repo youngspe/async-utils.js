@@ -5,7 +5,9 @@ import type * as Symbols from './symbols.ts';
 import type { Awaitable, Falsy } from './types.ts';
 import { isArray, whenAllSettled } from '@youngspe/common-async-utils';
 
-export interface CancellableParent {}
+export interface CancellableParent {
+  get error(): Error | undefined;
+}
 
 export interface Cancellable {
   cancel(reason: Error): Awaitable<void>;

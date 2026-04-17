@@ -1,3 +1,4 @@
+import { joinPromises } from '@youngspe/common-async-utils';
 import type { CancellableOptions } from '../cancel.ts';
 import { Token } from '../token.ts';
 import type { OptionalUndefinedProps } from '../types.ts';
@@ -6,6 +7,7 @@ import { type SubscriptionLifecycle, SubscriptionLifecycleManager, Subscription 
 export interface EventListenerKey {}
 
 export type MaybePromise<T, Async extends boolean> = T | (Async extends true ? Promise<T> : never);
+export type ConditionallyAsync<T, Async extends boolean> = Async extends true ? Promise<T> : T;
 
 interface Handler<T, Ret> {
   key: EventListenerKey;
@@ -176,7 +178,10 @@ class ListenerSetImpl<T, Ret> implements ListenerSet<T, Ret> {
 
 export interface EventControllerLike<in T, out Ret = void, Async extends boolean = false> {
   readonly getListeners: (this: void) => MaybePromise<ListenerSet<T, Ret>, Async>;
+  readonly emitAll: (this: void, value: T) => ConditionallyAsync<undefined, Async>;
+  readonly emitAllAsync: (this: void, value: T) => Promise<undefined>;
   readonly dispose: (this: void) => void;
+  readonly isActive: (this: void) => boolean;
 }
 
 export interface GenericEventController<T, Ret = void, Async extends boolean = false, Context = void>
@@ -217,7 +222,7 @@ type GenericEventLifecycle<T, Ret, Async extends boolean, Context> = Subscriptio
 
 class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
   handlers: Map<EventListenerKey, Handler<T, Ret>> | undefined = new Map();
-  #activeCount = 0;
+  activeCount = 0;
 
   readonly #lifecycle;
 
@@ -239,7 +244,7 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
 
     const { paused, passive } = handler;
 
-    if (!passive && !paused && this.#activeCount++ === 0) {
+    if (!passive && !paused && this.activeCount++ === 0) {
       const args = this.#getLifecycleArgs();
       if (!args) return;
       this.#lifecycle.init(...args).resume(...args);
@@ -259,7 +264,7 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
 
     handler.dispose?.();
 
-    if (!passive && !paused && --this.#activeCount === 0) {
+    if (!passive && !paused && --this.activeCount === 0) {
       this.#lifecycle.pause();
     }
 
@@ -272,7 +277,7 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
     const { paused, passive } = handler;
     handler.paused = false;
 
-    if (!passive && paused && this.#activeCount++ === 0) {
+    if (!passive && paused && this.activeCount++ === 0) {
       const args = this.#getLifecycleArgs();
       if (!args) return;
 
@@ -286,7 +291,7 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
     const { paused, passive } = handler;
     handler.paused = true;
 
-    if (!passive && !paused && --this.#activeCount === 0) {
+    if (!passive && !paused && --this.activeCount === 0) {
       this.#lifecycle.pause();
     }
   }
@@ -488,6 +493,23 @@ class DefaultGenericEventEmitter<T, Ret = void> extends GenericEventEmitter<T, R
       return inner();
     };
     readonly dispose = () => this.#state.dispose();
+    readonly emitAllAsync = async (value: T) => {
+      using ls = await this.getListeners();
+
+      return await joinPromises(ls.listeners(), l => l(value));
+    };
+    readonly emitAll = (value: T) => {
+      if (this.#isAsync) return this.emitAllAsync(value) as ConditionallyAsync<undefined, Async>;
+
+      using ls = this.getListeners() as ListenerSet<T, Ret>;
+
+      for (const l of ls.listeners()) {
+        l(value);
+      }
+
+      return undefined as ConditionallyAsync<undefined, Async>;
+    };
+    readonly isActive = () => this.#state.activeCount !== 0;
     readonly [Symbol.dispose] = this.dispose;
 
     get context(): Context {

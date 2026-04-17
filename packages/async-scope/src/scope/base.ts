@@ -1,5 +1,5 @@
 import { ScopeBase } from '@youngspe/async-scope-common';
-import { isPromiseLike } from '@youngspe/common-async-utils';
+import { isAsyncIterable, isIterable, isPromiseLike } from '@youngspe/common-async-utils';
 
 import type {
   Awaitable,
@@ -19,7 +19,12 @@ import { ScopedResources } from '../scopedResource.ts';
 import { StandardScope } from '../scope.ts';
 import { delay, type TimerOptions } from '../timers.ts';
 import { ContextData, type ContextDataBuilder } from './context.ts';
-import { CancellationError, unwrapCancellationError } from '../error.ts';
+import { CancellationError, toErrorForCancellation, unwrapCancellationError } from '../error.ts';
+
+export type TaskFunction<Ret, V extends object = object> = (
+  this: void,
+  cx: RunContext<V>,
+) => Awaitable<Ret>;
 
 export interface CommonScopeOptions extends CancellableOptions {}
 
@@ -48,8 +53,16 @@ export interface ScopeContextBase<out V extends object = object> {
   readonly signal: AbortSignal;
 }
 
-export type ScopeContext<T extends object = object> = BetterOmit<T, keyof ScopeContextBase>
+export type ScopeContext<T extends object = object, TBase extends object = object> = BetterOmit<
+  SetProps<TBase, T>,
+  keyof ScopeContextBase
+>
   & ScopeContextBase<T>;
+
+export type RunContext<T extends object = object> = ScopeContext<
+  { cancel: (this: void, reason?: unknown) => void; abort: (this: void, reason?: unknown) => never },
+  T
+>;
 
 export abstract class Scope<out V extends object = object> extends ScopeBase {
   /** The cancellation token that determines when this scope is closed. */
@@ -154,13 +167,11 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
   /**
    * @throws if this scope is closed.
    */
-  getContext(options?: CancellableOptions & { values?: undefined }): ScopeContext<V>;
-  getContext<V2 extends object>(
-    options: CancellableOptions & { values: V2 },
-  ): ScopeContext<UpdateObject<V, V2>>;
+  getContext(options?: CancellableOptions & { values?: undefined }): ScopeContext<object, V>;
+  getContext<V2 extends object = object>(options: CancellableOptions & { values: V2 }): ScopeContext<V2, V>;
   getContext<V2 extends object = V>(
     options?: CancellableOptions & { values?: V2 | undefined },
-  ): ScopeContext<UpdateObject<V, Partial<V2>>>;
+  ): ScopeContext<Partial<V2>, V>;
   getContext<V2 extends object>(options?: CancellableOptions & { values?: Partial<V2> | undefined }) {
     this.throwIfClosed();
 
@@ -169,15 +180,18 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
       scope = Scope.from([scope, options]);
       scope.throwIfClosed();
     }
+
+    let { contextData } = scope;
+
     if (options?.values) {
-      scope = scope.withContextValues(options.values);
+      contextData = contextData.builder().values(options.values).finish();
     }
     const cx = new Scope.#Context(scope);
-    return scope.contextData.updateContext(cx);
+    return contextData.updateContext(cx);
   }
 
   async #run<R, V2 extends object = V, R2 = never>(
-    block: (cx: ScopeContext<V2>) => Awaitable<R>,
+    block: TaskFunction<R, V2>,
     cancelOnComplete: boolean,
     onCancel: ((error: Error) => Awaitable<R2>) | undefined,
     ...params: ScopeLaunchOptionsParams<V, V2>
@@ -197,8 +211,21 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
 
     try {
       out = await subScope.resolveOrCancel(
-        block(subScope.getContext()),
-        onCancel ?? Promise.reject.bind(Promise),
+        block(
+          subScope.getContext({
+            values: {
+              abort: (reason: unknown = new CancellationError()) => {
+                const error = toErrorForCancellation(reason);
+                controller.cancel(error).catch(() => {});
+                throw error;
+              },
+              cancel: (reason: unknown = new CancellationError()) => {
+                controller.cancel(reason).catch(() => {});
+              },
+            },
+          }),
+        ),
+        onCancel,
       );
     } catch (error) {
       try {
@@ -231,7 +258,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
    * @returns a promise that resolves to the result of `block`, or rejects if the scope is closed first.
    */
   launch<R, V2 extends object = V>(
-    block: (cx: ScopeContext<V2>) => Awaitable<R>,
+    block: TaskFunction<R, V2>,
     ...params: ScopeLaunchOptionsParams<V, V2>
   ): Promise<R> {
     return this.#run(block, true, undefined, ...params);
@@ -248,7 +275,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
    * closed first.
    */
   async launchCancellable<R, V2 extends object = V>(
-    block: (cx: ScopeContext<V2>) => Awaitable<R>,
+    block: TaskFunction<R, V2>,
     ...params: ScopeLaunchOptionsParams<V, V2>
   ): Promise<R | undefined> {
     return this.#run(block, true, () => undefined, ...params);
@@ -265,7 +292,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
    * @returns a promise that resolves to the result of `block`, or rejects if the scope is closed first.
    */
   async run<R, V2 extends object = V>(
-    block: (cx: ScopeContext<V2>) => Awaitable<R>,
+    block: TaskFunction<R, V2>,
     ...params: ScopeLaunchOptionsParams<V, V2>
   ): Promise<R> {
     return this.#run(block, false, undefined, ...params);
@@ -284,7 +311,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
    * closed first.
    */
   async runCancellable<R, V2 extends object = V>(
-    block: (cx: ScopeContext<V2>) => Awaitable<R>,
+    block: TaskFunction<R, V2>,
     ...params: ScopeLaunchOptionsParams<V, V2>
   ): Promise<R | undefined> {
     return this.#run(block, false, () => undefined, ...params);
@@ -308,7 +335,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
   withContextData<V2 extends object = V>(data: ContextData<V2> | Falsy): Scope<V | SetProps<V, V2>>;
   withContextData<V2 extends object>(
     data: ((builder: ContextDataBuilder<V>) => ContextDataBuilder<V2> | void) | ContextData<V2> | Falsy,
-  ): Scope<V | V2 | SetProps<V, V2>> {
+  ): Scope<V> | Scope<SetProps<V, V2>> {
     if (!data || data === ContextData.empty) return this;
 
     const builder = this.contextData.builder();
@@ -319,7 +346,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
       builder.merge(data);
     }
 
-    return new StandardScope<V | V2>({ ...this.#parts(), contextData: builder.finish() });
+    return new StandardScope({ ...this.#parts(), contextData: builder.finish() });
   }
 
   withContextValues<V2 extends object = V>(values: V2): Scope<UpdateObject<V, V2>> {
@@ -333,6 +360,126 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
 
   replaceToken(token: Token) {
     return new StandardScope({ ...this.#parts(), token });
+  }
+
+  #runAll<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>
+      | Record<PropertyKey, TaskFunction<T, V>>,
+    cancelOnComplete: boolean,
+    scope?: Scope,
+  ): Promise<T[] | Record<PropertyKey, T>> {
+    const isIter = isIterable(tasks);
+    if (!isIter && !isAsyncIterable(tasks))
+      return (async () => {
+        const keys = Object.keys(tasks);
+        const values = Object.values(tasks);
+
+        const joinedValues = (await this.#runAll(values, cancelOnComplete, scope)) as T[];
+
+        const out: Record<PropertyKey, T> = {};
+
+        for (const [i, value] of joinedValues.entries()) {
+          out[keys[i]!] = value;
+        }
+
+        return out;
+      })();
+
+    return new Promise((resolve, reject) => {
+      const out: T[] = [];
+      let count = 1;
+      let i = 0;
+
+      const cancel = (error: unknown) => {
+        ctrl.cancel(error).then(() => reject(error), reject);
+      };
+
+      const ctrl = this.use(Token.createController());
+      const _scope = this.replaceToken(ctrl.token);
+      const options = { scope };
+
+      const inner = (task: TaskFunction<T, V>) => {
+        const index = i++;
+        ++count;
+
+        _scope.#run(task, cancelOnComplete, undefined, options).then(value => {
+          out[index] = value;
+          if (--count === 0) {
+            resolve(out);
+          }
+        }, cancel);
+      };
+
+      if (isIter) {
+        for (const task of tasks) {
+          inner(task);
+        }
+
+        if (--count === 0) {
+          resolve(out);
+        }
+      } else {
+        (async () => {
+          for await (const task of tasks) {
+            inner(task);
+          }
+
+          if (--count === 0) {
+            resolve(out);
+          }
+        })().catch(cancel);
+      }
+    });
+  }
+
+  launchAll<A extends readonly any[]>(
+    tasks: { [K in keyof A]: TaskFunction<A[K], V> },
+    options?: CancellableOptions,
+  ): Promise<A>;
+  launchAll<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>,
+    options?: CancellableOptions,
+  ): Promise<T[]>;
+  launchAll<A extends { readonly [k: PropertyKey]: any }>(
+    tasks: { [K in keyof A]: TaskFunction<A[K], V> },
+    options?: CancellableOptions,
+  ): Promise<A>;
+  launchAll<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>
+      | Record<PropertyKey, TaskFunction<T, V>>,
+    options?: CancellableOptions,
+  ): Promise<T[] | Record<PropertyKey, T>> {
+    return this.#runAll(tasks, true, options && Scope.from(options));
+  }
+
+  runAll<A extends readonly any[]>(
+    tasks: { [K in keyof A]: TaskFunction<A[K], V> },
+    options?: CancellableOptions,
+  ): Promise<A>;
+  runAll<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>,
+    options?: CancellableOptions,
+  ): Promise<T[]>;
+  runAll<A extends { readonly [k: PropertyKey]: any }>(
+    tasks: { [K in keyof A]: TaskFunction<A[K], V> },
+    options?: CancellableOptions,
+  ): Promise<A>;
+  runAll<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>
+      | Record<PropertyKey, TaskFunction<T, V>>,
+    options?: CancellableOptions,
+  ): Promise<T[] | Record<PropertyKey, T>> {
+    return this.#runAll(tasks, false, options && Scope.from(options));
   }
 
   #parts() {
