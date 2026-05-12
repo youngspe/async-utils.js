@@ -1,3 +1,8 @@
+/**
+ * Exports core flow operators and related types.
+ * These operators provide methods to transform, filter, observe, and manage the lifecycle of asynchronous data streams (Flows). 
+ * @description Provides exports for flow operators like map, filter, collect, and inspect.
+ */
 export {
   type FlowCollector,
   type FlowInspector,

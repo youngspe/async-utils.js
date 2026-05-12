@@ -1,21 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { test, suite, mock, beforeEach, afterEach, type Mock } from 'node:test';
+import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
-
-import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 
 import { defineFlow, emptyFlow, flowOf, toFlow } from '@youngspe/async-flows';
 
-let log!: Mock<(...args: any) => void>;
-useFakeTimers();
-
-beforeEach(() => {
-  log = mock.method(console, 'log');
-  log.mock.mockImplementation(() => {});
-});
-afterEach(() => {
-  mock.restoreAll();
-});
+import { getLogs } from './_init.ts';
 
 suite('defineFlow', () => {
   test('basic example', async () => {
@@ -48,7 +37,7 @@ suite('defineFlow', () => {
     // hello
 
     assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
+      getLogs(),
       [[1], [2], [3], ['hello']],
     );
   });
@@ -68,7 +57,7 @@ suite('flowOf', () => {
     // 3
 
     assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
+      getLogs(),
       [[1], [2], [3]],
     );
   });
@@ -85,7 +74,7 @@ suite('emptyFlow', () => {
     // No output
 
     assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
+      getLogs(),
       [],
     );
   });
@@ -103,7 +92,7 @@ suite('emptyFlow', () => {
     // hello
 
     assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
+      getLogs(),
       [['hello']],
     );
   });
@@ -123,7 +112,7 @@ suite('toFlow', () => {
     // 3
 
     assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
+      getLogs(),
       [[1], [2], [3]],
     );
   });
@@ -151,7 +140,7 @@ suite('toFlow', () => {
     // hello
 
     assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
+      getLogs(),
       [[1], [2], [3], ['hello']],
     );
   });

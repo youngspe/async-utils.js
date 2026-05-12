@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { test, suite, mock, beforeEach, afterEach, type Mock } from 'node:test';
+import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
-
-import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 
 import { defineFlow, flowOf, StateFlow, type Flow } from '@youngspe/async-flows';
 import {
@@ -33,16 +31,7 @@ import {
 } from '@youngspe/async-flows/ops';
 import { Scope, Token } from '@youngspe/async-scope';
 
-let log!: Mock<(...args: any) => void>;
-useFakeTimers();
-
-beforeEach(() => {
-  log = mock.method(console, 'log');
-  log.mock.mockImplementation(() => {});
-});
-afterEach(() => {
-  mock.restoreAll();
-});
+import { getLogs } from './_init.ts';
 
 suite('map', () => {
   test('basic example', async () => {
@@ -59,10 +48,7 @@ suite('map', () => {
     // 4
     // 6
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[2], [4], [6]],
-    );
+    assert.deepEqual(getLogs(), [[2], [4], [6]]);
   });
 });
 
@@ -92,10 +78,7 @@ suite('concatMap', () => {
     // 3
     // 3
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2], [2], [3], [3], [3]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [2], [3], [3], [3]]);
   });
 });
 
@@ -181,10 +164,7 @@ suite('mergeAll', () => {
     // a2
     // c4
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['b1'], ['c1'], ['b2'], ['c2'], ['c3'], ['a1'], ['b3'], ['a2'], ['c4']],
-    );
+    assert.deepEqual(getLogs(), [['b1'], ['c1'], ['b2'], ['c2'], ['c3'], ['a1'], ['b3'], ['a2'], ['c4']]);
   });
 });
 
@@ -206,10 +186,7 @@ suite('andThen', () => {
     // 5
     // 6
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2], [3], [4], [5], [6]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], [4], [5], [6]]);
   });
 });
 
@@ -238,10 +215,7 @@ suite('orCatch', () => {
     // 5
     // 6
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2], [3], [4], [5], [6]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], [4], [5], [6]]);
   });
 });
 
@@ -284,31 +258,28 @@ suite('buffer', () => {
     // Emitting: 10
     // 10
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [
-        ['Emitting:', 1],
-        [1],
-        ['Emitting:', 2],
-        ['Emitting:', 3],
-        ['Emitting:', 4],
-        [2],
-        [3],
-        [4],
-        ['Emitting:', 5],
-        [5],
-        ['Emitting:', 6],
-        ['Emitting:', 7],
-        ['Emitting:', 8],
-        [6],
-        ['Emitting:', 9],
-        [7],
-        [8],
-        [9],
-        ['Emitting:', 10],
-        [10],
-      ],
-    );
+    assert.deepEqual(getLogs(), [
+      ['Emitting:', 1],
+      [1],
+      ['Emitting:', 2],
+      ['Emitting:', 3],
+      ['Emitting:', 4],
+      [2],
+      [3],
+      [4],
+      ['Emitting:', 5],
+      [5],
+      ['Emitting:', 6],
+      ['Emitting:', 7],
+      ['Emitting:', 8],
+      [6],
+      ['Emitting:', 9],
+      [7],
+      [8],
+      [9],
+      ['Emitting:', 10],
+      [10],
+    ]);
   });
 });
 
@@ -328,10 +299,7 @@ suite('buffers', () => {
     // 5 6 7
     // 8 9 10
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2, 3, 4], [5, 6, 7], [8, 9, 10]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2, 3, 4], [5, 6, 7], [8, 9, 10]]);
   });
 });
 
@@ -351,10 +319,7 @@ suite('take', () => {
     // 4
     // 5
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2], [3], [4], [5]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], [4], [5]]);
   });
 });
 
@@ -372,10 +337,7 @@ suite('takeWhile', () => {
     // 3
     // 4
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2], [3], [4]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], [4]]);
   });
 });
 
@@ -395,10 +357,7 @@ suite('filter', () => {
     // 8
     // 10
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[2], [4], [6], [8], [10]],
-    );
+    assert.deepEqual(getLogs(), [[2], [4], [6], [8], [10]]);
   });
 });
 
@@ -488,10 +447,7 @@ suite('drain', () => {
     // done
 
     assert.equal(drained, 'done');
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[1], [2], [3], ['done']],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], ['done']]);
   });
 });
 
@@ -513,10 +469,7 @@ suite('inspect', () => {
     // Value: 3
     // 3
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['Value:', 1], [1], ['Value:', 2], [2], ['Value:', 3], [3]],
-    );
+    assert.deepEqual(getLogs(), [['Value:', 1], [1], ['Value:', 2], [2], ['Value:', 3], [3]]);
   });
 });
 
@@ -538,10 +491,7 @@ suite('inspectError', () => {
     // Output:
     // Error: Test error
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['Error: Test error']],
-    );
+    assert.deepEqual(getLogs(), [['Error: Test error']]);
   });
 });
 
@@ -562,10 +512,7 @@ suite('inspectStart', () => {
     // 3
     // Done!
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['Starting...'], [1], [2], [3], ['Done!']],
-    );
+    assert.deepEqual(getLogs(), [['Starting...'], [1], [2], [3], ['Done!']]);
   });
 });
 
@@ -585,10 +532,7 @@ suite('inspectFinally', () => {
     // Output:
     // Finally: success
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['Finally:', 'success']],
-    );
+    assert.deepEqual(getLogs(), [['Finally:', 'success']]);
   });
 
   test('with error', async () => {
@@ -608,10 +552,7 @@ suite('inspectFinally', () => {
     // Output:
     // Caught Error: Test error
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['Caught', 'Error: Test error']],
-    );
+    assert.deepEqual(getLogs(), [['Caught', 'Error: Test error']]);
   });
 });
 
@@ -653,10 +594,15 @@ suite('sharedFlow', () => {
     // B:3
     // Ending flow
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [['Starting flow'], ['A:1'], ['A:2'], ['B:2'], ['A:3'], ['B:3'], ['Ending flow']],
-    );
+    assert.deepEqual(getLogs(), [
+      ['Starting flow'],
+      ['A:1'],
+      ['A:2'],
+      ['B:2'],
+      ['A:3'],
+      ['B:3'],
+      ['Ending flow'],
+    ]);
   });
 });
 
@@ -680,10 +626,7 @@ suite('tryMap', () => {
     // 4
     // 6
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [[2], [4], [6]],
-    );
+    assert.deepEqual(getLogs(), [[2], [4], [6]]);
   });
 });
 
@@ -743,20 +686,17 @@ suite('lifecycle', () => {
     // close B
     // close A
 
-    assert.deepEqual(
-      log.mock.calls.map(c => c.arguments),
-      [
-        ['open A'],
-        ['open B'],
-        ['open C'],
-        ['close C'],
-        ['close B'],
-        ['open B'],
-        ['open C'],
-        ['close C'],
-        ['close B'],
-        ['close A'],
-      ],
-    );
+    assert.deepEqual(getLogs(), [
+      ['open A'],
+      ['open B'],
+      ['open C'],
+      ['close C'],
+      ['close B'],
+      ['open B'],
+      ['open C'],
+      ['close C'],
+      ['close B'],
+      ['close A'],
+    ]);
   });
 });
