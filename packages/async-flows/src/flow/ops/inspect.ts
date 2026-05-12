@@ -47,6 +47,29 @@ export const inspect = <T, TReturn, TNext>(
  * (e.g., `scope.delay()`) without modifying the value.
  *
  * @param onEach - Function called with a scope context for each value. If falsy, the operator is a no-op.
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { inspectScoped } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3).do(
+ *   inspectScoped(async ({ value }) => {
+ *     console.log('Scoped:', value);
+ *   }),
+ * );
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // Scoped: 1
+ * // 1
+ * // Scoped: 2
+ * // 2
+ * // Scoped: 3
+ * // 3
+ * ```
  */
 export const inspectScoped = <T, TReturn, TNext>(
   onEach: ((cx: ScopeContext<{ value: T }>) => Awaitable<void>) | Falsy,
@@ -64,6 +87,24 @@ export const inspectScoped = <T, TReturn, TNext>(
  * This allows observing the values that consumers pass back via the iterator's `next()` call.
  *
  * @param onInput - Function called with each input value. If falsy, the operator is a no-op.
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { inspectInput } from '@youngspe/async-flows/ops';
+ *
+ * const flow = defineFlow(async ({ emit }) => {
+ *   await emit(1);
+ *   await emit(2);
+ *   await emit(3);
+ * }).do(inspectInput(value => console.log('Input:', value)));
+ *
+ * await flow.each(() => {});
+ * // Output:
+ * // Input: undefined
+ * // Input: undefined
+ * // Input: undefined
+ * ```
  */
 export const inspectInput = <T, TReturn, TNext>(
   onInput: ((value: TNext) => Awaitable<void>) | Falsy,
@@ -82,6 +123,22 @@ export const inspectInput = <T, TReturn, TNext>(
  * Allows observing input values with scope features available.
  *
  * @param onInput - Function called with a scope context for each input value. If falsy, the operator is a no-op.
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { inspectInputScoped } from '@youngspe/async-flows/ops';
+ *
+ * const flow = defineFlow(async ({ emit }) => {
+ *   await emit(1);
+ * }).do(inspectInputScoped(async ({ value }) => {
+ *   console.log('Input:', value);
+ * }));
+ *
+ * await flow.each(() => {});
+ * // Output:
+ * // Input: undefined
+ * ```
  */
 export const inspectInputScoped = <T, TReturn, TNext>(
   onInput: ((cx: ScopeContext<{ value: TNext }>) => Awaitable<void>) | Falsy,
@@ -144,6 +201,20 @@ export const inspectComplete = <T, TReturn, TNext>(
  *
  * @param onComplete - Function called with a scope context containing the return value on success
  * @param onError - Optional function called with a scope context containing the error if the flow fails
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { inspectCompleteScoped } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3).do(
+ *   inspectCompleteScoped(async ({ value }) => console.log('Complete:', value)),
+ * );
+ *
+ * await flow.each(() => {});
+ * // Output:
+ * // Complete: undefined
+ * ```
  */
 export const inspectCompleteScoped = <T, TReturn, TNext>(
   onComplete: ((cx: ScopeContext<{ value: TReturn }>) => Awaitable<void>) | Falsy,
@@ -199,6 +270,23 @@ export const inspectError = <T, TReturn, TNext>(
  * Calls the given function when the flow encounters an error, with access to the scope context.
  *
  * @param onError - Function called with a scope context containing the error. If falsy, the operator is a no-op.
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { inspectErrorScoped } from '@youngspe/async-flows/ops';
+ *
+ * const failingFlow = defineFlow(async ({ emit }) => {
+ *   await emit(1);
+ *   throw new Error('Test error');
+ * });
+ *
+ * const logged = failingFlow.do(inspectErrorScoped(async ({ error }) => console.log(String(error))));
+ *
+ * await logged.each(() => {}).catch(() => {});
+ * // Output:
+ * // Error: Test error
+ * ```
  */
 export const inspectErrorScoped = <T, TReturn, TNext>(
   onError?: ((cx: ScopeContext<{ error: unknown }>) => Awaitable<void>) | Falsy,

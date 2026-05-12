@@ -1,9 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { defineFlow, flowOf } from '@youngspe/async-flows';
-import { collectArray, collectMap, collectSet, associate, drain } from '@youngspe/async-flows/ops';
+import {
+  collectArray,
+  collectMap,
+  collectSet,
+  associate,
+  drain,
+  feedback,
+} from '@youngspe/async-flows/ops';
 
 import { getLogs } from '../_init.ts';
 
@@ -76,5 +82,18 @@ suite('drain', () => {
 
     assert.equal(drained, 'done');
     assert.deepEqual(getLogs(), [[1], [2], [3], ['done']]);
+  });
+});
+
+suite('feedback', () => {
+  test('basic example', async () => {
+    const result = await defineFlow(async ({ emit }) => {
+      await emit(1);
+      return 42;
+    }).do(feedback());
+
+    console.log(result);
+
+    assert.equal(result, 42);
   });
 });

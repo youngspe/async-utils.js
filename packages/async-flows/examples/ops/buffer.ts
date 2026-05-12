@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { flowOf } from '@youngspe/async-flows';
-import { buffer, buffers, inspectScoped } from '@youngspe/async-flows/ops';
+import { buffer, buffers, bufferReduce, inspectScoped, tryBufferReduce } from '@youngspe/async-flows/ops';
 
 import { getLogs } from '../_init.ts';
 
@@ -60,5 +59,55 @@ suite('buffers', () => {
     });
 
     assert.deepEqual(getLogs(), [[1], [2, 3, 4], [5, 6, 7], [8, 9, 10]]);
+  });
+});
+
+suite('bufferReduce', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, 2, 3, 4, 5).do(
+      bufferReduce(
+        async ({ value, emit }, sum) => {
+          const newSum = sum + value;
+          await emit(newSum);
+          return newSum;
+        },
+        () => 0,
+        async ({ value }, sum) => {
+          console.log(sum);
+          return value;
+        },
+      ),
+    );
+
+    await flow.each(({ value }) => {
+      console.log(value);
+    });
+
+    assert.deepEqual(getLogs(), [[1], [3], [6], [10], [15], [15]]);
+  });
+});
+
+suite('tryBufferReduce', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, 2, 3, 4, 5).do(
+      tryBufferReduce(
+        async ({ value, emit }, sum: number) => {
+          const newSum = sum + value;
+          await emit(newSum);
+          return { continue: newSum };
+        },
+        async () => ({ continue: 0 }),
+        async ({ value }, sum) => {
+          console.log(sum);
+          return { continue: value };
+        },
+      ),
+    );
+
+    await flow.each(({ value }) => {
+      console.log(value);
+    });
+
+    assert.deepEqual(getLogs(), [[1], [3], [6], [10], [15], [15]]);
   });
 });

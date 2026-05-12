@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -6,8 +5,13 @@ import { defineFlow, flowOf } from '@youngspe/async-flows';
 import {
   inspect,
   inspectComplete,
+  inspectCompleteScoped,
   inspectError,
+  inspectErrorScoped,
   inspectFinally,
+  inspectInput,
+  inspectInputScoped,
+  inspectScoped,
   inspectStart,
 } from '@youngspe/async-flows/ops';
 
@@ -91,5 +95,100 @@ suite('inspectFinally', () => {
       .catch(() => {});
 
     assert.deepEqual(getLogs(), [['Caught', 'Error: Test error']]);
+  });
+});
+
+suite('inspectScoped', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, 2, 3).do(
+      inspectScoped(async ({ value }) => {
+        console.log('Scoped:', value);
+      }),
+    );
+
+    await flow.each(({ value }) => {
+      console.log(value);
+    });
+
+    assert.deepEqual(getLogs(), [['Scoped:', 1], [1], ['Scoped:', 2], [2], ['Scoped:', 3], [3]]);
+  });
+});
+
+suite('inspectInput', () => {
+  test('basic example', async () => {
+    const flow = defineFlow(async ({ emit }) => {
+      await emit(1);
+      await emit(2);
+      await emit(3);
+    }).do(inspectInput(value => console.log('Input:', value)));
+
+    await flow.each(() => {});
+
+    assert.deepEqual(getLogs(), [
+      ['Input:', undefined],
+      ['Input:', undefined],
+      ['Input:', undefined],
+    ]);
+  });
+});
+
+suite('inspectInputScoped', () => {
+  test('basic example', async () => {
+    const flow = defineFlow(async ({ emit }) => {
+      await emit(1);
+    }).do(
+      inspectInputScoped(async ({ value }) => {
+        console.log('Input:', value);
+      }),
+    );
+
+    await flow.each(() => {});
+
+    assert.deepEqual(getLogs(), [['Input:', undefined]]);
+  });
+});
+
+suite('inspectCompleteScoped', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, 2, 3).do(
+      inspectCompleteScoped(async ({ value }) => console.log('Complete:', value)),
+    );
+
+    await flow.each(() => {});
+
+    assert.deepEqual(getLogs(), [['Complete:', undefined]]);
+  });
+
+  test('with error', async () => {
+    const failingFlow = defineFlow(async ({ emit }) => {
+      await emit(1);
+      throw new Error('Test error');
+    });
+
+    const logged = failingFlow.do(
+      inspectCompleteScoped(
+        async ({ value }) => console.log('Complete:', value),
+        async ({ error }) => console.log(String(error)),
+      ),
+    );
+
+    await logged.each(() => {}).catch(() => {});
+
+    assert.deepEqual(getLogs(), [['Error: Test error']]);
+  });
+});
+
+suite('inspectErrorScoped', () => {
+  test('basic example', async () => {
+    const failingFlow = defineFlow(async ({ emit }) => {
+      await emit(1);
+      throw new Error('Test error');
+    });
+
+    const logged = failingFlow.do(inspectErrorScoped(async ({ error }) => console.log(String(error))));
+
+    await logged.each(() => {}).catch(() => {});
+
+    assert.deepEqual(getLogs(), [['Error: Test error']]);
   });
 });

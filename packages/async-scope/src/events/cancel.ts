@@ -1,7 +1,7 @@
 import { cascadeSync, isPromiseLike, joinPromises } from '@youngspe/common-async-utils';
 
 import { type CancellableLike, type CancellableParent, type CancellationListener } from '../cancel.ts';
-import { combineErrors, toErrorForCancellation, unwrapCancellationError } from '../error.ts';
+import { combineErrors, toErrorForCancellation } from '../error.ts';
 import * as Symbols from '../symbols.ts';
 import { Token, type TokenController } from '../token.ts';
 import type { Awaitable, Falsy } from '../types.ts';

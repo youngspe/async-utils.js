@@ -167,6 +167,30 @@ export function collectIf<T, X>(
 /**
  * Observes the flow and discards all yielded values.
  * Resolves to the return value of the flow.
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { drain } from '@youngspe/async-flows/ops';
+ *
+ * const cleanup = defineFlow(async ({ emit }) => {
+ *   console.log(1);
+ *   await emit(1);
+ *   console.log(2);
+ *   await emit(2);
+ *   console.log(3);
+ *   await emit(3);
+ *   return 'done';
+ * });
+ *
+ * const drained = await cleanup.do(drain());
+ * console.log(drained);
+ * // Output:
+ * // 1
+ * // 2
+ * // 3
+ * // done
+ * ```
  */
 export const drain =
   <TReturn = unknown>(
@@ -178,6 +202,21 @@ export const drain =
 /**
  * Observes the flow, feeding yielded items back as input vales.
  * Resolves to the return value of the flow.
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { feedback } from '@youngspe/async-flows/ops';
+ *
+ * const result = await defineFlow(async ({ emit }) => {
+ *   await emit(1);
+ *   return 42;
+ * }).do(feedback());
+ *
+ * console.log(result);
+ * // Output:
+ * // 42
+ * ```
  */
 export const feedback =
   <T extends TNext, TReturn = unknown, TNext = T>(

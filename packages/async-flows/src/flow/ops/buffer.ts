@@ -144,6 +144,38 @@ export const buffers = <T, TReturn>(
  * @param reducer - Called for each value with the current accumulator; returns a `ControlFlow` directing continuation or break
  * @param init - Initializes the accumulator state before any values are processed
  * @param onComplete - Transforms the final accumulator and the flow's return value into the output return value
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { tryBufferReduce } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3, 4, 5).do(
+ *   tryBufferReduce(
+ *     async ({ value, emit }, sum) => {
+ *       const newSum = sum + value;
+ *       await emit(newSum);
+ *       return { continue: newSum };
+ *     },
+ *     async () => ({ continue: 0 }),
+ *     async ({ value }, sum) => {
+ *       console.log(sum);
+ *       return { continue: value };
+ *     },
+ *   ),
+ * );
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // 1
+ * // 3
+ * // 6
+ * // 10
+ * // 15
+ * // 15
+ * ```
  */
 export function tryBufferReduce<
   T,
@@ -241,6 +273,38 @@ export function tryBufferReduce<
  * @param reducer - Called for each value with the current accumulator; returns the new accumulator
  * @param init - Initializes the accumulator state before any values are processed
  * @param onComplete - Transforms the final accumulator and the flow's return value into the output return value
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { bufferReduce } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3, 4, 5).do(
+ *   bufferReduce(
+ *     async ({ value, emit }, sum) => {
+ *       const newSum = sum + value;
+ *       await emit(newSum);
+ *       return newSum;
+ *     },
+ *     () => 0,
+ *     async ({ value }, sum) => {
+ *       console.log(sum);
+ *       return value;
+ *     },
+ *   ),
+ * );
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // 1
+ * // 3
+ * // 6
+ * // 10
+ * // 15
+ * // 15
+ * ```
  */
 export function bufferReduce<T, TReturn, Acc = T, U = T, UReturn = TReturn, UNext = unknown>(
   reducer: (cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>, acc: Acc) => Awaitable<Acc>,

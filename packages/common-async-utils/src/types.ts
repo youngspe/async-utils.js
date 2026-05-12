@@ -12,10 +12,10 @@ type _OptionalUndefinedParams<A extends any[], R extends any[]> =
 
 export type OptionalUndefinedParams<A extends any[]> = _OptionalUndefinedParams<A, A>;
 
-type SimplifyObject<T> = { [K in keyof T]: T[K] };
+// type SimplifyObject<T> = { [K in keyof T]: T[K] };
 
-type AssumeSubtype<Super, Sub> = Sub extends infer _Sub extends Super ? Sub : never;
-type CheckSubtype<Super, Sub extends Super> = Sub;
+// type AssumeSubtype<Super, Sub> = Sub extends infer _Sub extends Super ? Sub : never;
+// type CheckSubtype<Super, Sub extends Super> = Sub;
 
 /**
  * Makes properties of `T` that may be `undefined` optional.

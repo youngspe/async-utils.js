@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
 

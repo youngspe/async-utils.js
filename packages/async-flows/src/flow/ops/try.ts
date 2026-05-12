@@ -1,5 +1,4 @@
 import type { ScopeContext } from '@youngspe/async-scope';
-import type { Awaitable } from '@youngspe/async-scope-common';
 
 import type { AsyncControlFlow, ControlFlow } from '../../controlFlow.ts';
 import { Flow, type FlowExecutorContext } from '../../flow.ts';
@@ -11,6 +10,33 @@ import { type FlowTransformer } from './module.ts';
  * the flow entirely.
  *
  * @param fn - Transformation function returning a `ControlFlow` to continue or break
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { tryTransformEach } from '@youngspe/async-flows/ops';
+ *
+ * const flow = defineFlow<number>(async ({ emit }) => {
+ *   await emit(1);
+ *   await emit(2);
+ *   await emit(3);
+ *   await emit(4);
+ *   await emit(5);
+ * }).do(
+ *   tryTransformEach(async ({ value, emit }) => {
+ *     if (value === 4) return { break: undefined as never };
+ *     return { continue: emit(value * 2) };
+ *   }),
+ * );
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // 2
+ * // 4
+ * // 6
+ * ```
  */
 export const tryTransformEach =
   <T, TReturn, TNext, U, UNext, B>(

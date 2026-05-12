@@ -1,9 +1,21 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { defineFlow, flowOf, type Flow } from '@youngspe/async-flows';
-import { map, concatMap, mergeAll, filter } from '@youngspe/async-flows/ops';
+import {
+  defined,
+  discardInput,
+  filter,
+  map,
+  concatMap,
+  mapInput,
+  mapInputScoped,
+  mapReturn,
+  mapReturnScoped,
+  mapScoped,
+  mergeAll,
+  drain,
+} from '@youngspe/async-flows/ops';
 
 import { getLogs } from '../_init.ts';
 
@@ -128,5 +140,121 @@ suite('filter', () => {
     });
 
     assert.deepEqual(getLogs(), [[2], [4], [6], [8], [10]]);
+  });
+});
+
+suite('mapScoped', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, 2, 3).do(mapScoped(async ({ value }) => value * 2));
+
+    await flow.each(({ value }) => {
+      console.log(value);
+    });
+
+    assert.deepEqual(getLogs(), [[2], [4], [6]]);
+  });
+});
+
+suite('mapInput', () => {
+  test('basic example', async () => {
+    const flow = defineFlow<void, undefined, number>(async ({ emit }) => {
+      console.log(await emit());
+      console.log(await emit());
+      console.log(await emit());
+    });
+
+    const inputMapped = flow.do(mapInput(async value => value * 10));
+
+    let i = 1;
+
+    await inputMapped.each(() => {
+      return i++;
+    });
+
+    // Output:
+    // 10
+    // 20
+    // 30
+
+    assert.deepEqual(getLogs(), [[10], [20], [30]]);
+  });
+});
+
+suite('mapInputScoped', () => {
+  test('basic example', async () => {
+    const flow = defineFlow<void, undefined, number>(async ({ emit }) => {
+      console.log(await emit());
+      console.log(await emit());
+      console.log(await emit());
+    });
+
+    const inputMapped = flow.do(mapInputScoped(async ({ value }) => value * 10));
+
+    let i = 1;
+
+    await inputMapped.each(() => {
+      return i++;
+    });
+
+    // Output:
+    // 10
+    // 20
+    // 30
+
+    assert.deepEqual(getLogs(), [[10], [20], [30]]);
+  });
+});
+
+suite('mapReturn', () => {
+  test('basic example', async () => {
+    const result = await defineFlow(async ({ emit }) => {
+      await emit(1);
+      return 'original';
+    })
+      .do(mapReturn(value => value.toUpperCase()))
+      .do(drain());
+
+    console.log(result);
+
+    assert.equal(result, 'ORIGINAL');
+  });
+});
+
+suite('mapReturnScoped', () => {
+  test('basic example', async () => {
+    const result = await defineFlow(async ({ emit }) => {
+      await emit(1);
+      return 42;
+    })
+      .do(mapReturnScoped(async ({ value }) => value * 2))
+      .do(drain());
+
+    console.log(result);
+
+    assert.equal(result, 84);
+  });
+});
+
+suite('discardInput', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, 2, 3).do(discardInput());
+
+    await flow.each(({ value }) => {
+      console.log(value);
+    });
+
+    assert.deepEqual(getLogs(), [[1], [2], [3]]);
+  });
+});
+
+suite('defined', () => {
+  test('basic example', async () => {
+    const flow = flowOf(1, undefined, 2, undefined, 3).do(defined());
+
+    await flow.each(({ value }) => {
+      console.log(value);
+    });
+
+    assert.deepEqual(getLogs(), [[1], [2], [3]]);
   });
 });

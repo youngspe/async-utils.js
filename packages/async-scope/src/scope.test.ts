@@ -7,6 +7,7 @@ import { Scope } from './scope.ts';
 import { delay } from './timers.ts';
 import { Token } from './token.ts';
 import { ResourceKey } from './scopedResource.ts';
+import { CancellationError } from './error.ts';
 
 suite('Scope', () => {
   const { clock } = useFakeTimers();
@@ -114,6 +115,108 @@ suite('Scope', () => {
       });
 
       assert.deepEqual(out, { foo: 1, bar: 2, baz: 3 });
+    });
+  });
+
+  suite('#race', () => {
+    test('race three timers', async ({ signal }) => {
+      const scope = Scope.from({ signal });
+
+      let cancellations = 0;
+
+      const out = await scope.race([
+        async ({ scope }) => {
+          scope.token.add(() => {
+            ++cancellations;
+          });
+          await scope.delay(20);
+          assert.fail('this should be cancelled');
+          // return 'a';
+        },
+        async ({ scope }) => {
+          await scope.delay(10);
+          return 'b';
+        },
+        async ({ scope }) => {
+          scope.token.add(() => {
+            ++cancellations;
+          });
+          await scope.delay(15);
+          assert.fail('this should be cancelled');
+          // return 'c';
+        },
+      ]);
+
+      assert.equal(out, 'b');
+      assert.equal(cancellations, 2);
+    });
+
+    test('ignore cancellation while still pending', async ({ signal }) => {
+      const scope = Scope.from({ signal });
+
+      const out = await scope.race([
+        async ({ scope }) => {
+          await scope.delay(20);
+          return 'a';
+        },
+        async ({ scope }) => {
+          await scope.delay(10);
+          throw new CancellationError();
+          // return 'b';
+        },
+        async ({ scope }) => {
+          await scope.delay(15);
+          return 'c';
+        },
+      ]);
+
+      assert.equal(out, 'c');
+    });
+    test('reject with last cancellation', async ({ signal }) => {
+      const scope = Scope.from({ signal });
+
+      await assert.rejects(
+        () =>
+          scope.race([
+            async ({ scope }) => {
+              await scope.delay(20);
+              throw new CancellationError('a');
+            },
+            async ({ scope }) => {
+              await scope.delay(10);
+              throw new CancellationError('b');
+            },
+            async ({ scope }) => {
+              await scope.delay(15);
+              throw new CancellationError('c');
+            },
+          ]),
+        new CancellationError('a'),
+      );
+    });
+
+    test('reject on non-cancellation error', async ({ signal }) => {
+      const scope = Scope.from({ signal });
+
+      await assert.rejects(
+        () =>
+          scope.race([
+            async ({ scope }) => {
+              await scope.delay(20);
+              return 'a';
+            },
+            async ({ scope }) => {
+              await scope.delay(10);
+              throw new Error('foo');
+              // return 'b';
+            },
+            async ({ scope }) => {
+              await scope.delay(15);
+              return 'c';
+            },
+          ]),
+        new Error('foo'),
+      );
     });
   });
 });

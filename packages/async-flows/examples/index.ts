@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { test, suite } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -36,10 +35,7 @@ suite('defineFlow', () => {
     // 3
     // hello
 
-    assert.deepEqual(
-      getLogs(),
-      [[1], [2], [3], ['hello']],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], ['hello']]);
   });
 });
 
@@ -56,10 +52,7 @@ suite('flowOf', () => {
     // 2
     // 3
 
-    assert.deepEqual(
-      getLogs(),
-      [[1], [2], [3]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3]]);
   });
 });
 
@@ -73,10 +66,7 @@ suite('emptyFlow', () => {
 
     // No output
 
-    assert.deepEqual(
-      getLogs(),
-      [],
-    );
+    assert.deepEqual(getLogs(), []);
   });
 
   test('basic example', async () => {
@@ -91,10 +81,7 @@ suite('emptyFlow', () => {
     // Output:
     // hello
 
-    assert.deepEqual(
-      getLogs(),
-      [['hello']],
-    );
+    assert.deepEqual(getLogs(), [['hello']]);
   });
 });
 
@@ -111,10 +98,7 @@ suite('toFlow', () => {
     // 2
     // 3
 
-    assert.deepEqual(
-      getLogs(),
-      [[1], [2], [3]],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3]]);
   });
 
   test('from an async iterable', async () => {
@@ -139,9 +123,6 @@ suite('toFlow', () => {
     // 3
     // hello
 
-    assert.deepEqual(
-      getLogs(),
-      [[1], [2], [3], ['hello']],
-    );
+    assert.deepEqual(getLogs(), [[1], [2], [3], ['hello']]);
   });
 });

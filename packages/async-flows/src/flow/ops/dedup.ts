@@ -1,5 +1,5 @@
 import { Token, type Subscription, type TokenController } from '@youngspe/async-scope';
-import { FlowError, isNonDeferredFlowError, NewItemReceived } from '../abstract.ts';
+import { isNonDeferredFlowError } from '../abstract.ts';
 import { defineFlow } from '../util.ts';
 import type { FlowInspector } from './module.ts';
 
@@ -21,16 +21,16 @@ import type { FlowInspector } from './module.ts';
  *
  * const flow = flowOf(
  *   { id: 1, name: 'a' },
- *   { id: 1, name: 'a' },
- *   { id: 2, name: 'b' },
- *   { id: 1, name: 'c' },
+ *   { id: 1, name: 'b' },
+ *   { id: 2, name: 'c' },
+ *   { id: 1, name: 'd' },
  * ).do(dedupByKey(x => x.id));
  *
  * await flow.each(({ value }) => console.log(value.name));
  * // Output:
  * // a
- * // b
  * // c
+ * // d
  * ```
  */
 export const dedupByKey =

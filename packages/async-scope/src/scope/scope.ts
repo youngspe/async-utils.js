@@ -16,7 +16,7 @@ import type {
   UndefinedIfDefault,
   UpdateObject,
 } from '../types.ts';
-import { Token, STATIC_TOKEN } from '../token.ts';
+import { Token, STATIC_TOKEN, type TokenController } from '../token.ts';
 import { type CancellableOptions } from '../cancel.ts';
 import { scopeFrom } from './from.ts';
 import type { CancellableLike } from '../cancel.ts';
@@ -771,6 +771,129 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     options?: CancellableOptions,
   ): Promise<T[] | Record<PropertyKey, T>> {
     return this.#runAll(tasks, false, options && Scope.from(options));
+  }
+
+  race<A extends readonly T[], T = A[number]>(
+    tasks: { [K in keyof A]: TaskFunction<A[K], V> },
+    options?: CancellableOptions,
+  ): Promise<T>;
+  race<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>,
+    options?: CancellableOptions,
+  ): Promise<T>;
+  race<T>(
+    tasks:
+      | Iterable<TaskFunction<T, V>, unknown, undefined>
+      | AsyncIterable<TaskFunction<T, V>, unknown, undefined>,
+    options?: CancellableOptions,
+  ): Promise<T> {
+    const scope = options ? Scope.from([this, options]) : this;
+    const { error } = scope.token;
+    if (error) return Promise.reject(error);
+
+    return new Promise((resolve, reject) => {
+      let output: { value: T } | undefined;
+      const commonCtrl = scope.use(
+        Token.createController({
+          onAfterCancel: error => {
+            if (output) {
+              resolve(output.value);
+            } else {
+              reject(error);
+            }
+          },
+        }),
+      );
+
+      const close = (e?: unknown) => void commonCtrl.cancel(e).catch(reject);
+
+      let count = 1;
+      let cancellation: CancellationError | undefined;
+
+      const runTask = (fn: TaskFunction<T, V>) => {
+        ++count;
+        const ctrl = commonCtrl.token.use(Token.createController());
+        let taskComplete = false;
+
+        const onError = (reason: unknown) => {
+          if (taskComplete || commonCtrl.token.isCancelled) return;
+          taskComplete = true;
+
+          const allDone = --count === 0;
+
+          const error = toErrorForCancellation(reason);
+
+          if (error instanceof CancellationError && !allDone) {
+            cancellation = error;
+            return;
+          }
+          close(error);
+        };
+
+        const onComplete = (value: T) => {
+          if (taskComplete || commonCtrl.token.isCancelled) return;
+          taskComplete = true;
+          --count;
+
+          ctrl.defuse();
+
+          output ??= { value };
+          close();
+        };
+
+        try {
+          const out = fn(
+            scope.getContext({
+              token: ctrl.token,
+              values: {
+                cancel: onError,
+                abort: e => {
+                  const error = toErrorForCancellation(e);
+                  onError(error);
+                  throw error;
+                },
+              },
+            }),
+          );
+
+          if (isPromiseLike(out)) {
+            out.then(onComplete, onError);
+          } else {
+            onComplete(out);
+          }
+        } catch (reason) {
+          onError(reason);
+        }
+      };
+
+      if (isIterable(tasks)) {
+        try {
+          for (const fn of tasks) {
+            if (output || commonCtrl.token.isCancelled) return;
+            runTask(fn);
+          }
+
+          if (--count === 0 && cancellation) {
+            close(cancellation);
+          }
+        } catch (e) {
+          close(e);
+        }
+      } else {
+        (async () => {
+          for await (const fn of tasks) {
+            if (output || commonCtrl.token.isCancelled) return;
+            runTask(fn);
+          }
+
+          if (--count === 0 && cancellation) {
+            close(cancellation);
+          }
+        })().catch(close);
+      }
+    });
   }
 
   /**

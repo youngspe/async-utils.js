@@ -63,6 +63,24 @@ export const map =
  * (e.g., scope cancellation, delays) during the transformation.
  *
  * @param fn - Mapping function that receives a scope context and returns the transformed value
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { mapScoped } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3).do(
+ *   mapScoped(async ({ value }) => value * 2),
+ * );
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // 2
+ * // 4
+ * // 6
+ * ```
  */
 export function mapScoped<T, TReturn, TNext, U>(
   fn: (value: ScopeContext<{ value: T }>) => Awaitable<U>,
@@ -74,6 +92,30 @@ export function mapScoped<T, TReturn, TNext, U>(
  * Transforms each input value sent back into the flow by consumers (via the iterator's `next()` call).
  *
  * @param fn - Function that transforms input values
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { mapInput } from '@youngspe/async-flows/ops';
+ * const flow = defineFlow<void, undefined, number>(async ({ emit }) => {
+ *   console.log(await emit());
+ *   console.log(await emit());
+ *   console.log(await emit());
+ * });
+ *
+ * const inputMapped = flow.do(mapInput(async value => value * 10));
+ *
+ * let i = 1;
+ *
+ * await inputMapped.each(() => {
+ *   return i++;
+ * });
+ *
+ * // Output:
+ * // 10
+ * // 20
+ * // 30
+ * ```
  */
 export const mapInput =
   <T, TReturn, TNext, UNext = TNext>(
@@ -86,6 +128,30 @@ export const mapInput =
  * Transforms each input value sent back into the flow with access to the scope context.
  *
  * @param fn - Function that receives a scope context with the input value and returns the transformed input
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { mapInputScoped } from '@youngspe/async-flows/ops';
+ * const flow = defineFlow<void, undefined, number>(async ({ emit }) => {
+ *   console.log(await emit());
+ *   console.log(await emit());
+ *   console.log(await emit());
+ * });
+ *
+ * const inputMapped = flow.do(mapInputScoped(async ({ value }) => value * 10));
+ *
+ * let i = 1;
+ *
+ * await inputMapped.each(() => {
+ *   return i++;
+ * });
+ *
+ * // Output:
+ * // 10
+ * // 20
+ * // 30
+ * ```
  */
 export const mapInputScoped =
   <T, TReturn, TNext, UNext = TNext>(
@@ -98,6 +164,23 @@ export const mapInputScoped =
  * Transforms the return value of the flow when it completes successfully.
  *
  * @param fn - Function that transforms the flow's return value
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { drain, mapReturn } from '@youngspe/async-flows/ops';
+ *
+ * const result = await defineFlow(async ({ emit }) => {
+ *   await emit(1);
+ *   return 'original';
+ * }).do(
+ *   mapReturn(value => (value as string).toUpperCase()),
+ * ).do(drain());
+ *
+ * console.log(result);
+ * // Output:
+ * // ORIGINAL
+ * ```
  */
 export const mapReturn =
   <T, TReturn, TNext, UReturn = TReturn>(
@@ -110,6 +193,23 @@ export const mapReturn =
  * Transforms the return value of the flow with access to the scope context.
  *
  * @param fn - Function that receives a scope context with the return value and returns the transformed return value
+ *
+ * @example
+ * ```ts
+ * import { defineFlow } from '@youngspe/async-flows';
+ * import { drain, mapReturnScoped } from '@youngspe/async-flows/ops';
+ *
+ * const result = await defineFlow(async ({ emit }) => {
+ *   await emit(1);
+ *   return 42;
+ * }).do(
+ *   mapReturnScoped(async ({ value }) => value * 2),
+ * ).do(drain());
+ *
+ * console.log(result);
+ * // Output:
+ * // 84
+ * ```
  */
 export const mapReturnScoped =
   <T, TReturn, TNext, UReturn = TReturn>(
@@ -121,6 +221,22 @@ export const mapReturnScoped =
 /**
  * Discards all input values sent back into the flow by consumers.
  * This is useful when the flow does not need feedback from consumers.
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { discardInput } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3).do(discardInput());
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // 1
+ * // 2
+ * // 3
+ * ```
  */
 export const discardInput =
   <T, TReturn>(): FlowTransformer<Flow<T, TReturn, undefined>, T, TReturn, unknown> =>
@@ -166,6 +282,22 @@ export function filter<T, TReturn, TNext>(
 /**
  * Filters out `undefined` values from the flow, yielding only defined values.
  * This is a type-narrowing filter: the output type excludes `undefined`.
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { defined } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, undefined, 2, undefined, 3).do(defined());
+ *
+ * await flow.each(({ value }) => {
+ *   console.log(value);
+ * });
+ * // Output:
+ * // 1
+ * // 2
+ * // 3
+ * ```
  */
 export const defined =
   <T, TReturn, TNext>(): FlowTransformer<
@@ -345,6 +477,28 @@ export const mergeMap =
  * and can yield multiple values or perform async work.
  *
  * @param fn - Function that receives a scope context with value and emit, and performs the transformation
+ *
+ * @example
+ * ```ts
+ * import { flowOf } from '@youngspe/async-flows';
+ * import { mergeTransform } from '@youngspe/async-flows/ops';
+ *
+ * const flow = flowOf(1, 2, 3).do(
+ *   mergeTransform(async ({ emit, value }) => {
+ *     await emit(value);
+ *     await emit(value * 10);
+ *   }),
+ * );
+ *
+ * await flow.each(({ value }) => console.log(value));
+ * // Output:
+ * // 1
+ * // 10
+ * // 2
+ * // 20
+ * // 3
+ * // 30
+ * ```
  */
 export const mergeTransform =
   <T, TReturn, U>(

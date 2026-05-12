@@ -5,18 +5,22 @@ export function nestedMicrotask<Args extends readonly unknown[] = []>(
   callback: (...args: [...Args]) => void,
   ...args: Args
 ): void {
-  if (!(n > 0)) {
-    callback(...args);
+  if (n > 0) {
+    const inner = () => {
+      if (n === 0) {
+        callback(...args);
+        return;
+      }
+
+      --n;
+
+      queueMicrotask(inner);
+    };
+    inner();
     return;
   }
-
-  let _callback = (args.length ? callback.bind(undefined, ...args) : callback) as () => void;
-
-  for (let i = 1; i < n; ++i) {
-    _callback = queueMicrotask.bind(undefined, callback);
-  }
-
-  _callback();
+  callback(...args);
+  return;
 }
 
 export function microtaskRepeat<Args extends readonly unknown[] = []>(

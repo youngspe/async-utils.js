@@ -337,7 +337,6 @@ export class Deque<T> implements Iterable<T> {
    * Otherwise, returns `undefined` and leaves the deque unchanged.
    */
   shiftN<const N extends number>(n: N): ArrayOfLength<N, T> | undefined {
-    type X = ArrayOfLength<-1, 0>;
     if (n <= 0) return [] as T[] as ArrayOfLength<N, T>;
     if (this.#size < n) return undefined;
 
