@@ -1,16 +1,12 @@
-import type { CancellableOptions, Scope, ScopeContext } from '@youngspe/async-scope';
+import type { CancellableOptions, Scope, ScopeContext, ToScope } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 
-import type { ControlFlow } from '../controlFlow.ts';
-import {
-  _asAsyncFlow,
-  _asFlow,
-  failedFlow,
-  Flow,
-  toFlow,
-  type FlowExecutorContext,
-  type ToFlow,
-} from '../flow.ts';
+import type { AsyncControlFlow, ControlFlow } from '#pkg/controlFlow';
+
+import { _asAsyncFlow, _asFlow, Flow } from './flow.ts';
+import type { FlowExecutorContext } from './abstract.ts';
+import type { StateFlow } from './state.ts';
+import { type ToFlow, failedFlow, toFlow } from './util.ts';
 
 export class DeferredFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   #promise: Promise<Flow<T, TReturn, TNext>>;
@@ -28,9 +24,6 @@ export class DeferredFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
     super();
     this.#promise = promise.then(f => {
       this.#inner = f;
-      if (f.repeatable) {
-        this.repeatable = true;
-      }
 
       return f;
     });
@@ -44,7 +37,7 @@ export class DeferredFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   }
 
   override tryEach<B = never>(
-    handler: (cx: ScopeContext<{ value: T }>) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+    handler: (cx: ScopeContext<{ value: T }>) => AsyncControlFlow<B, TNext>,
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, TReturn>> {
     if (this.#inner) return this.#inner.tryEach(handler, options);
@@ -60,7 +53,7 @@ export class DeferredFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   }
 
   override tryEachValue<B = never>(
-    handler: (value: T) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+    handler: (value: T) => AsyncControlFlow<B, TNext>,
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, TReturn>> {
     if (this.#inner) return this.#inner.tryEachValue(handler, options);
@@ -91,29 +84,69 @@ export class DeferredFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
     })(this.#promise);
   }
 
-  override tryTransformEach<U, UNext, B>(
+  override tryTransformEach<U, UNext, B, Init = undefined>(
     fn: (
       cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>,
-    ) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
-  ) {
-    if (this.#inner) return this.#inner.tryTransformEach(fn);
-    return new DeferredFlow(this.#promise.then(f => f.tryTransformEach(fn)));
+      init: Init | undefined,
+    ) => AsyncControlFlow<B, TNext>,
+    init?: (cx: FlowExecutorContext<U, UNext>) => AsyncControlFlow<B, Init>,
+  ): Flow<U, ControlFlow<B, TReturn>, UNext> {
+    if (this.#inner) return this.#inner.tryTransformEach(fn, init);
+    return new DeferredFlow(this.#promise.then(f => f.tryTransformEach(fn, init)));
   }
 
-  override transformEach<U, UNext>(
-    fn: (cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>) => Awaitable<TNext>,
-  ) {
-    if (this.#inner) return this.#inner.transformEach(fn);
-    return new DeferredFlow(this.#promise.then(f => f.transformEach(fn)));
+  override transformEach<U, UNext, Init = undefined>(
+    fn: (
+      cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>,
+      init: Init | undefined,
+    ) => Awaitable<TNext>,
+    init?: (cx: FlowExecutorContext<U, UNext>) => Awaitable<Init>,
+  ): Flow<U, TReturn, UNext> {
+    if (this.#inner) return this.#inner.transformEach(fn, init);
+    return new DeferredFlow(this.#promise.then(f => f.transformEach(fn, init)));
   }
-
-  override chain(...rhs: Flow<T, TReturn, TNext>[]) {
+  override chain<U = T, UReturn = TReturn>(
+    ...flows: ToFlow<U, UReturn, TNext>[]
+  ): Flow<T | U, TReturn | UReturn, TNext>;
+  override chain(...rhs: Flow<T, TReturn, TNext>[]): Flow<T, TReturn, TNext> {
     if (this.#inner) return this.#inner.chain(...rhs);
     return new DeferredFlow(this.#promise.then(f => f.chain(...rhs)));
   }
 
-  override thenChain(...rhs: Array<(value: TReturn) => ToFlow<T, TReturn, TNext>>) {
+  override thenChain(
+    ...rhs: Array<(value: TReturn) => ToFlow<T, TReturn, TNext>>
+  ): Flow<T, TReturn, TNext> {
     if (this.#inner) return this.#inner.thenChain(...rhs);
     return new DeferredFlow(this.#promise.then(f => f.thenChain(...rhs)));
+  }
+
+  override inScope(scope: ToScope): Flow<T, TReturn, TNext> {
+    if (this.#inner) return this.#inner.inScope(scope);
+    return new DeferredFlow(this.#promise.then(f => f.inScope(scope)));
+  }
+  override state(
+    this: DeferredFlow<T, TReturn, undefined>,
+    options: CancellableOptions & { scope: ToScope },
+  ): StateFlow<T> {
+    if (this.#inner) return this.#inner.state(options);
+    return super.state(options);
+  }
+
+  override mapScoped<U, UNext = TNext, UReturn = TReturn>(
+    fn?: (value: ScopeContext<{ value: T }>) => Awaitable<U>,
+    inputFn?: (cx: ScopeContext<{ value: UNext }>) => Awaitable<TNext>,
+    returnFn?: (value: ScopeContext<{ value: TReturn }>) => Awaitable<UReturn>,
+  ): Flow<U, UReturn, UNext> {
+    if (this.#inner) return this.#inner.mapScoped(fn, inputFn, returnFn);
+    return new DeferredFlow(this.#promise.then(f => f.mapScoped(fn, inputFn, returnFn)));
+  }
+
+  override buffer(
+    this: DeferredFlow<T, TReturn, undefined>,
+    size: number,
+    scope?: Scope,
+  ): Flow<T, TReturn, unknown> {
+    if (this.#inner) return this.#inner.buffer(size, scope);
+    return new DeferredFlow(this.#promise.then(f => f.buffer(size, scope)));
   }
 }

@@ -1,7 +1,8 @@
 import type { Scope, ScopeContext } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 
-import { AbstractFlow, type FlowExecutor, type FlowExecutorContext } from '../flow.ts';
+import { AbstractFlow, type FlowExecutor, type FlowExecutorContext } from './abstract.ts';
+import type { Flow } from './flow.ts';
 
 export class FunctionFlow<T, TReturn, TNext> extends AbstractFlow<T, TReturn, TNext> {
   #fn: FlowExecutor<T, TReturn, TNext> | Error;
@@ -22,7 +23,7 @@ export class FunctionFlow<T, TReturn, TNext> extends AbstractFlow<T, TReturn, TN
     this.#fn = error;
   }
 
-  override _inScope(scope: Scope) {
+  override _inScope(scope: Scope): Flow<T, TReturn, TNext> {
     const fn = this.#fn;
     if (typeof fn !== 'function') return this;
     return new FunctionFlow(fn, scope);

@@ -1,4 +1,4 @@
 {
   "js/ts.tsdk.path": "node_modules/typescript/lib",
-  "cSpell.words": ["Mpmc", "subscope", "youngspe"]
+  "cSpell.words": ["dedup", "Deque", "lifecycles", "Mpmc", "subscope", "subscopes", "tsgo", "youngspe"]
 }

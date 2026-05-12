@@ -6,6 +6,10 @@
     ".": "./dist/index.js",
     "./events": "./dist/events.js"
   },
+  "imports": {
+    "#pkg": "./dist/index.js",
+    "#pkg/*": "./dist/*.js"
+  },
   "type": "module",
   "scripts": {
     "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test \"./dist/**/*.test.js\""

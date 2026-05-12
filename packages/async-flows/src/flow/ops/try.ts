@@ -1,22 +1,20 @@
 import type { ScopeContext } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 
-import type { ControlFlow } from '../../controlFlow.ts';
+import type { AsyncControlFlow, ControlFlow } from '../../controlFlow.ts';
 import { Flow, type FlowExecutorContext } from '../../flow.ts';
 import { type FlowTransformer } from './module.ts';
 
 export const tryTransformEach =
   <T, TReturn, TNext, U, UNext, B>(
-    fn: (
-      cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>,
-    ) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+    fn: (cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>) => AsyncControlFlow<B, TNext>,
   ): FlowTransformer<Flow<T, TReturn, TNext>, U, ControlFlow<B, TReturn>, UNext> =>
   src =>
     src.tryTransformEach(fn);
 
 export const tryMap =
   <T, TReturn, TNext, U, B>(
-    fn: (value: T) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<U>>>,
+    fn: (value: T) => AsyncControlFlow<B, U>,
   ): FlowTransformer<Flow<T, TReturn, TNext>, U, ControlFlow<B, TReturn>, TNext> =>
   src =>
     src.tryTransformEach(async ({ value, emit }) => {

@@ -5,8 +5,9 @@ import {
   type GenericEventEmitter,
   type ScopeContext,
 } from '@youngspe/async-scope';
+
 import { AbstractFlow, type FlowExecutorContext } from './abstract.ts';
-import type { Flow } from '../flow.ts';
+import type { Flow } from './flow.ts';
 
 export class SyncEventFlow<T> extends AbstractFlow<T, undefined, unknown> {
   #emitter;

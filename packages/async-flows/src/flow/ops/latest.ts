@@ -1,7 +1,7 @@
 import { Scope, Token } from '@youngspe/async-scope';
 import { defineFlow, Flow, toFlow, type ToFlow } from '../../flow.ts';
 import { compose, type FlowTransformer } from './module.ts';
-import { flat, map } from './transform.ts';
+import { concatAll, map } from './transform.ts';
 
 export const latest =
   <T, TReturn = undefined, TNext = void>(): FlowTransformer<
@@ -39,9 +39,9 @@ export const switchLatest = <T, TReturn = undefined, TNext = void, UNext = void>
   T,
   TReturn,
   UNext
-> => compose(latest(), flat());
+> => compose(latest(), concatAll());
 
 export const switchMap = <T, TReturn = undefined, TNext = void, U = T, UNext = void>(
   fn: (value: T) => ToFlow<U, TNext | undefined, UNext>,
 ): FlowTransformer<Flow<T, TReturn, TNext | undefined>, U, TReturn, UNext> =>
-  compose(map(fn), latest(), flat());
+  compose(map(fn), switchLatest());

@@ -1,5 +1,10 @@
 import { ScopeBase } from '@youngspe/async-scope-common';
-import { isAsyncIterable, isIterable, isPromiseLike } from '@youngspe/common-async-utils';
+import {
+  isAsyncIterable,
+  isIterable,
+  isPromiseLike,
+  type ValueOrFunction,
+} from '@youngspe/common-async-utils';
 
 import type {
   Awaitable,
@@ -16,36 +21,56 @@ import { type CancellableOptions } from '../cancel.ts';
 import { scopeFrom } from './from.ts';
 import type { CancellableLike } from '../cancel.ts';
 import { ScopedResources } from '../scopedResource.ts';
-import { StandardScope } from '../scope.ts';
+import { createScopeStack, StandardScope, type ScopeStack } from '../scope.ts';
 import { delay, type TimerOptions } from '../timers.ts';
 import { ContextData, type ContextDataBuilder } from './context.ts';
 import { CancellationError, toErrorForCancellation, unwrapCancellationError } from '../error.ts';
 
+/**
+ * Function type for use in the {@linkcode Scope#launch} and {@linkcode Scope#run} family of methods
+ */
 export type TaskFunction<Ret, V extends object = object> = (
   this: void,
   cx: RunContext<V>,
 ) => Awaitable<Ret>;
 
+/**
+ * Options common to scope-related operations
+ *
+ * @see {@link CancellableOptions}
+ */
 export interface CommonScopeOptions extends CancellableOptions {}
 
+/** Options for {@linkcode Scope#launch} etc. that are not part of {@link CommonScopeOptions}. */
 interface ScopeLaunchSpecificOptions<V extends object, V2 extends object> {
   transformScope: (scope: Scope<V>) => Scope<V2>;
 }
 
+/** {@link ScopeLaunchOptions} in the case where `V` extends `V2` */
 interface ScopeLaunchOptionsBase<V extends object = object, V2 extends object = V>
   extends CommonScopeOptions, PartialOrUndefined<ScopeLaunchSpecificOptions<V, V2>> {}
 
+/** {@link ScopeLaunchOptions} in the case where `V` does not extend `V2` */
 interface ScopeLaunchOptionsRequired<V extends object = object, V2 extends object = V>
   extends CommonScopeOptions, ScopeLaunchSpecificOptions<V, V2> {}
 
+/**
+ * Options for the {@linkcode Scope#launch} and {@linkcode Scope#run} family of methods
+ *
+ * @interface
+ */
 export type ScopeLaunchOptions<V extends object = object, V2 extends object = V> =
   [V] extends [V2] ? ScopeLaunchOptionsBase<V, V2> : ScopeLaunchOptionsRequired<V, V2>;
 
+/**
+ * The parameter list for the {@linkcode Scope#launch} and {@linkcode Scope#run} family of methods
+ */
 export type ScopeLaunchOptionsParams<
   V extends object = object,
   V2 extends object = V,
 > = OptionalUndefinedParams<[options: UndefinedIfDefault<ScopeLaunchOptions<V, V2>>]>;
 
+/** A {@link ScopeContext} without any additional values */
 export interface ScopeContextBase<out V extends object = object> {
   readonly scope: Scope<V>;
   readonly token: Token;
@@ -53,27 +78,131 @@ export interface ScopeContextBase<out V extends object = object> {
   readonly signal: AbortSignal;
 }
 
+/**
+ * A context object to be passed to a function in a scope-defined task.
+ *
+ * @example
+ * import { Scope, type ScopeContext } from '@youngspe/async-scope';
+ *
+ * function runInScopeWithValue<T, Ret>
+ *   scope: Scope,
+ *   value: T,
+ *   fn: (cx: ScopeContext<{ value: T }>) => Ret,
+ * ) {
+ *   return fn(scope.getContext({ values: { value }}));
+ * }
+ *
+ * const myScope = Scope.static;
+ *
+ * runInScopeWithValue(myScope, 'foo', ({ value, scope }) => {
+ *   // ...
+ * });
+ *
+ * @see {@linkcode Scope.getContext()}
+ */
 export type ScopeContext<T extends object = object, TBase extends object = object> = BetterOmit<
   SetProps<TBase, T>,
   keyof ScopeContextBase
 >
-  & ScopeContextBase<T>;
+  & ScopeContextBase<TBase>;
 
+/**
+ * A specialized {@link ScopeContext} for use in {@link TaskFunction}s.
+ */
 export type RunContext<T extends object = object> = ScopeContext<
   { cancel: (this: void, reason?: unknown) => void; abort: (this: void, reason?: unknown) => never },
   T
 >;
 
+/**
+ * A {@link Scope} represents the span of an asynchronous operation. A scope defines a context
+ * within which asynchronous tasks can be launched, run, and coordinated. It provides a mechanism
+ * for lifecycle management of asynchronous operations, enabling cancellation, resource
+ * coordination, and context data propagation.
+ *
+ * ## Lifecycle Management
+ *
+ * A scope's lifecycle is determined by its associated {@link Token}. When the token is cancelled:
+ *
+ * - All running tasks within the scope and its children are cancelled
+ * - The cancellation error is propagated to all subscopes
+ * - Tasks can handle cancellation via their respective handlers
+ *
+ * ## Launch vs. Run
+ *
+ * - **launch**: Starts a task in a subscope that is cancelled when the task completes.
+ *
+ * - **run**: Similar to `launch`, but the subscope is only cancelled if a parent scope is cancelled
+ *   or the task function throws or rejects.
+ *   This allows work spawned by the task to continue until the parent scope closes.
+ *
+ * - **launchCancellable** / **runCancellable**: Like the above, but resolves to `undefined` if the
+ *   task rejects or is cancelled with a {@link CancellationError}.
+ *   Use this when you do not want an exception to be thrown for a cancellation not caused by
+ *   an error.
+ *
+ * ## Nested Scopes
+ *
+ * When a parent scope is cancelled, all nested scopes receive the cancellation signal.
+ * The cancellation is not complete until all cancellation handlers in nested scopes have
+ * finished executing. This ensures that cleanup code in child tasks runs before the entire
+ * operation terminates.
+ *
+ * ## Context Data
+ *
+ * Scopes can carry context data (via {@link ContextData}) that is passed to tasks through
+ * {@linkcode Scope#getContext()}. This enables dependency injection patterns where tasks receive
+ * services, configuration, or other contextual information.
+ *
+ * ## Resource Coordination
+ *
+ * Scopes support resource injection via {@link ScopedResources}. Resources can be provided through
+ * a builder function passed to {@linkcode Scope#withResources()}, enabling dependency injection for
+ * things like databases, HTTP clients, or other resources specific to the current task.
+ *
+ * @example
+ * <caption>Usage pattern</caption>
+ *
+ * import { Scope, Token } from '@youngspe/async-scope';
+ *
+ * const ctrl = Token.createController();
+ *
+ * const root = Scope.from(ctrl);
+ *
+ * try {
+ *   await root.launch({ scope, cancel, abort, resources, token, signal } => {
+ *     // task receives context: cancel(), abort(), resources, context data
+ *   }});
+ *
+ *   await root.run(({ scope, cancel, abort, resources, token, signal }) => {
+ *     // Background job that runs until root scope closes
+ *     return monitorForever(scope);
+ *   });
+ * } finally {
+ *   await ctrl.cancel();
+ * }
+ *
+ * @see {@link Token}
+ * @see {@link ContextData}
+ * @see {@link ScopedResources}
+ */
 export abstract class Scope<out V extends object = object> extends ScopeBase {
   /** The cancellation token that determines when this scope is closed. */
   abstract override get token(): Token;
 
+  /** The resources associated with this scope. */
   abstract get resources(): ScopedResources;
 
+  /**
+   * @see {@linkcode Token#isCancelled}
+   */
   get isClosed(): boolean {
     return this.token.isCancelled;
   }
 
+  /**
+   * @see {@linkcode Token#signal}
+   */
   get signal(): AbortSignal {
     return this.token.signal;
   }
@@ -90,20 +219,29 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
   /**
    * @see {@linkcode Token#use}
    */
-  use<T extends CancellableLike>(value: T): T {
-    return this.token.use(value);
+  use<X>(
+    value: ValueOrFunction<X & CancellableLike, [cx: ScopeContext<object, V>], X>,
+    options?: CancellableOptions,
+  ): X {
+    const scope = options ? Scope.from<V>([this, options]) : this;
+    return scope.token.use(typeof value === 'function' ? () => value(scope.getContext()) : value);
   }
 
   /**
    * @see {@linkcode Token#tryUse}
    */
-  tryUse<T extends CancellableLike>(value: T): T | undefined {
-    return this.token.tryUse(value);
+  tryUse<X>(
+    value: ValueOrFunction<X & CancellableLike, [cx: ScopeContext<object, V>], X>,
+    options?: CancellableOptions,
+  ): X | undefined {
+    const scope = options ? Scope.from<V>([this, options]) : this;
+    return scope.token.tryUse(typeof value === 'function' ? () => value(scope.getContext()) : value);
   }
 
   /** This scope */
   readonly scope: Scope<V> = this;
 
+  /** Resolves the given promise, but rejects or calls `onCancel` if the scope is closed first */
   resolveOrCancel<T, U = never>(
     promise: Awaitable<T>,
     onCancel?: (error: Error) => Awaitable<U>,
@@ -148,6 +286,11 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     });
   }
 
+  /**
+   * Resolves the given promise or `undefined` if the scope is closed first with a {@link CancellationError}
+   *
+   * @see {@linkcode Scope#resolveOrCancel()}
+   */
   resolveOrUndefined<T>(promise: Awaitable<T>): Promise<T | undefined> {
     return this.resolveOrCancel(promise, () => undefined);
   }
@@ -160,11 +303,36 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return newScope as Scope<V | V2> as Scope<V2>;
   }
 
+  /**
+   * The {@link ContextData} object that provides extra values to include in a context created for
+   * this scope.
+   *
+   * @see {@linkcode Scope#getContext()}
+   */
   get contextData(): ContextData<V> {
     return ContextData.empty as ContextData<V>;
   }
 
-  /**
+  /**   *
+   * Creates a {@link ScopeContext} object based on this scope.
+   *
+   * @example
+   * import { Scope, type ScopeContext } from '@youngspe/async-scope';
+   *
+   * function runInScopeWithValue<T, Ret>
+   *   scope: Scope,
+   *   value: T,
+   *   fn: (cx: ScopeContext<{ value: T }>) => Ret,
+   * ) {
+   *   return fn(scope.getContext({ values: { value }}));
+   * }
+   *
+   * const myScope = Scope.static;
+   *
+   * runInScopeWithValue(myScope, 'foo', ({ value, scope }) => {
+   *   // ...
+   * });
+   *
    * @throws if this scope is closed.
    */
   getContext(options?: CancellableOptions & { values?: undefined }): ScopeContext<object, V>;
@@ -190,6 +358,17 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return contextData.updateContext(cx);
   }
 
+  /**
+   * @param block - The asynchronous operation for this task.
+   * @param cancelOnComplete - If `true`, the sub-scope is closed when the async operation
+   *    is complete.
+   * @param onCancel - Action taken on cancellation. If none provided, rejects.
+   *
+   * @see {@link Scope#run}
+   * @see {@link Scope#runCancellable}
+   * @see {@link Scope#launch}
+   * @see {@link Scope#launchCancellable}
+   */
   async #run<R, V2 extends object = V, R2 = never>(
     block: TaskFunction<R, V2>,
     cancelOnComplete: boolean,
@@ -317,6 +496,10 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return this.#run(block, false, () => undefined, ...params);
   }
 
+  /**
+   * Creates a new scope based on this one, but with the resources defined using the given
+   * builder function
+   */
   withResources(block: (builder: ScopedResources.Builder) => ScopedResources.Builder | void): Scope<V> {
     const builder = ScopedResources.builder(this.token).inherit(this.resources);
     block(builder);
@@ -325,6 +508,12 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return new StandardScope({ ...this.#parts(), resources });
   }
 
+  /**
+   * Creates a new scope based on this one, but with context data defined using the given
+   * builder function or {@link ContextData}
+   *
+   * @see {@linkcode Scope#getContext()}
+   */
   withContextData<V2 extends object>(
     block: (builder: ContextDataBuilder<V>) => ContextDataBuilder<V2>,
   ): Scope<V2>;
@@ -349,16 +538,30 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return new StandardScope({ ...this.#parts(), contextData: builder.finish() });
   }
 
+  /**
+   * Creates a new scope based on this one, but with context data with values from the given object
+   *
+   * @see {@linkcode Scope#getContext()}
+   */
   withContextValues<V2 extends object = V>(values: V2): Scope<UpdateObject<V, V2>> {
     const contextData = this.contextData.builder().values(values).finish();
     return new StandardScope({ ...this.#parts(), contextData });
   }
 
+  /**
+   * Returns a promise that resolves after the given number of milliseconds or rejects if the scope
+   * is closed first.
+   */
   delay(ms: number, options?: TimerOptions) {
     return delay(ms, { ...options, scope: [this, options?.scope] });
   }
 
+  /**
+   * Creates a new scope based on this one, but with the given {@link Token} instead of the
+   * current token.
+   */
   replaceToken(token: Token) {
+    if (token === this.token) return this;
     return new StandardScope({ ...this.#parts(), token });
   }
 
@@ -434,6 +637,50 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     });
   }
 
+  /**
+   * Starts multiple tasks with {@linkcode Scope#launch} and awaits their results.
+   *
+   * @example
+   * <caption>Awaiting a sequence of tasks</caption>
+   *
+   * import assert from 'node:assert';
+   * import { Scope } from '@youngspe/async-scope';
+   *
+   * const myScope = Scope.static;
+   *
+   * const [a, b, c] = await myScope.launchAll([
+   *   ({ scope }) => scope.delay(10).then(() => 1),
+   *   ({ scope }) => 2,
+   *   async ({ scope }) => {
+   *     await scope.delay(20);
+   *     return 3;
+   *   },
+   * ]);
+   *
+   * assert.deepEqual([a, b, c], [1, 2, 3]);
+   *
+   * @example
+   * <caption>Awaiting an object of tasks</caption>
+   *
+   * import assert from 'node:assert';
+   * import { Scope } from '@youngspe/async-scope';
+   *
+   * const myScope = Scope.static;
+   *
+   * const { a, b, c } = await myScope.launchAll({
+   *   a: ({ scope }) => scope.delay(10).then(() => 1),
+   *   b: ({ scope }) => 2,
+   *   c: async ({ scope }) => {
+   *     await scope.delay(20);
+   *     return 3;
+   *   },
+   * });
+   *
+   * assert.deepEqual({ a, b, c }, { a: 1, b: 2, c: 3 });
+   *
+   * @see {@linkcode Scope#launch}
+   * @see {@linkcode Scope#runAll}
+   */
   launchAll<A extends readonly any[]>(
     tasks: { [K in keyof A]: TaskFunction<A[K], V> },
     options?: CancellableOptions,
@@ -458,6 +705,50 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return this.#runAll(tasks, true, options && Scope.from(options));
   }
 
+  /**
+   * Starts multiple tasks with {@linkcode Scope#run} and awaits their results.
+   *
+   * @example
+   * <caption>Awaiting a sequence of tasks</caption>
+   *
+   * import assert from 'node:assert';
+   * import { Scope } from '@youngspe/async-scope';
+   *
+   * const myScope = Scope.static;
+   *
+   * const [a, b, c] = await myScope.runAll([
+   *   ({ scope }) => scope.delay(10).then(() => 1),
+   *   ({ scope }) => 2,
+   *   async ({ scope }) => {
+   *     await scope.delay(20);
+   *     return 3;
+   *   },
+   * ]);
+   *
+   * assert.deepEqual([a, b, c], [1, 2, 3]);
+   *
+   * @example
+   * <caption>Awaiting an object of tasks</caption>
+   *
+   * import assert from 'node:assert';
+   * import { Scope } from '@youngspe/async-scope';
+   *
+   * const myScope = Scope.static;
+   *
+   * const { a, b, c } = await myScope.runAll({
+   *   a: ({ scope }) => scope.delay(10).then(() => 1),
+   *   b: ({ scope }) => 2,
+   *   c: async ({ scope }) => {
+   *     await scope.delay(20);
+   *     return 3;
+   *   },
+   * });
+   *
+   * assert.deepEqual({ a, b, c }, { a: 1, b: 2, c: 3 });
+   *
+   * @see {@linkcode Scope#run}
+   * @see {@linkcode Scope#launchAll}
+   */
   runAll<A extends readonly any[]>(
     tasks: { [K in keyof A]: TaskFunction<A[K], V> },
     options?: CancellableOptions,
@@ -482,15 +773,43 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
     return this.#runAll(tasks, false, options && Scope.from(options));
   }
 
+  /**
+   * Creates a {@link ScopeStack} bound to this scope.
+   */
+  createStack(options?: CancellableOptions): ScopeStack<V> {
+    return createScopeStack(options ? Scope.from([this, options]) : this);
+  }
+
+  /** Returns an object with just the parts used to create a new {@linkcode StandardScope} */
   #parts() {
     return { token: this.token, resources: this.resources, contextData: this.contextData };
   }
 
+  /**
+   * Creates a scope from a scope-like value.
+   *
+   * This may be:
+   * - A {@link Token}
+   * - A {@link Scope}
+   * - An AbortSignal
+   * - An object with a `token`, `scope`, or `signal` property, such as
+   *   {@link CancellableOptions}, {@link TokenController}, or `AbortController`
+   * - A falsy value (e.g. `false` or `undefined`)
+   *   - This results in {@linkcode Scope.static}
+   * - A (possibly nested) array or set of any of the above
+   *   - The resulting scope is closed when at least one of the items in the collection is closed.
+   *
+   * @see {@linkcode Token.from()}
+   */
   static from<V extends object = object>(this: void, src: ToScope<V>): Scope<V> {
     return scopeFrom(src);
   }
 
-  /** An empty scope that will never be closed. */
+  /**
+   * An empty scope that will never be closed.
+   *
+   * This can be used as a starting point for launching top-level tasks.
+   */
   static get static() {
     return STATIC_SCOPE;
   }
@@ -513,6 +832,7 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
   };
 }
 
+/** @see {@link Scope.static} */
 class StaticScope extends Scope {
   readonly resources = ScopedResources.empty;
   override get token(): Token {
@@ -520,8 +840,10 @@ class StaticScope extends Scope {
   }
 }
 
+/** @see {@link Scope.static} */
 export const STATIC_SCOPE: Scope = new StaticScope();
 
+/** Special case of {@link ToScope} where `V` has no required properties */
 type ToScopeBase<V extends object = object> =
   | Scope<V>
   | Token
@@ -536,4 +858,10 @@ type ToScopeWithContext<V extends object> =
   | readonly [ToScopeWithContext<V>, ...ToScopeBase<Partial<V>>[]]
   | (CancellableOptions & { scope: ToScopeWithContext<V> });
 
+/**
+ * A value that can be passed to {@linkcode Scope.from()} to create a new scope.
+ *
+ * @see {@linkcode Scope.from()}
+ * @see {@linkcode Token.from()}
+ */
 export type ToScope<V extends object = object> = object extends V ? ToScopeBase<V> : ToScopeWithContext<V>;

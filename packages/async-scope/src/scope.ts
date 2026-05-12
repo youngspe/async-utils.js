@@ -1,5 +1,6 @@
-export { Scope, STATIC_SCOPE } from './scope/base.ts';
+export { Scope, STATIC_SCOPE } from './scope/scope.ts';
 export { StandardScope } from './scope/standard.ts';
+export * from './scope/scopeStack.ts';
 
 export type {
   CommonScopeOptions,
@@ -7,4 +8,4 @@ export type {
   ScopeLaunchOptions,
   TaskFunction,
   ToScope,
-} from './scope/base.ts';
+} from './scope/scope.ts';

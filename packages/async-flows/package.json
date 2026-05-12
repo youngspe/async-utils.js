@@ -6,9 +6,13 @@
     ".": "./dist/index.js",
     "./ops": "./dist/flow/ops.js"
   },
+  "imports": {
+    "#pkg": "./dist/index.js",
+    "#pkg/*": "./dist/*.js"
+  },
   "type": "module",
   "scripts": {
-    "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test-timeout=3000 --test \"./dist/**/*.test.js\""
+    "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test-timeout=3000 --test \"./dist/**/*.test.js\" \"./examples/**/*.ts\""
   },
   "dependencies": {
     "@youngspe/async-iter-utils": "workspace:",

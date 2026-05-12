@@ -1,8 +1,11 @@
 import { Scope, type CancellableOptions, type ScopeContext, type ToScope } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 
-import { ControlFlow } from '../controlFlow.ts';
-import { Flow, toFlow, type FlowExecutorContext, type ToFlow } from '../flow.ts';
+import { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
+
+import { Flow } from './flow.ts';
+import { toFlow, type ToFlow } from './util.ts';
+import type { FlowExecutorContext } from './abstract.ts';
 
 export class ChainFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   #first: Flow<T, TReturn, TNext>;
@@ -17,7 +20,7 @@ export class ChainFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   }
 
   override async tryEach<B = never>(
-    handler: (cx: ScopeContext<{ value: T }>) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+    handler: (cx: ScopeContext<{ value: T }>) => AsyncControlFlow<B, TNext>,
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, TReturn>> {
     let out = await this.#first.tryEach(handler, options);
@@ -51,7 +54,7 @@ export class ChainFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   }
 
   override async tryEachValue<B = never>(
-    handler: (value: T) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+    handler: (value: T) => AsyncControlFlow<B, TNext>,
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, TReturn>> {
     let out = await this.#first.tryEachValue(handler, options);
@@ -112,28 +115,38 @@ export class ChainFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
     return out;
   }
 
-  override tryTransformEach<U, UNext, B>(
+  override tryTransformEach<U, UNext, B, Init = undefined>(
     fn: (
       cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>,
-    ) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+      init: Init | undefined,
+    ) => AsyncControlFlow<B, TNext>,
+    init?: (cx: FlowExecutorContext<U, UNext>) => AsyncControlFlow<B, Init>,
   ): Flow<U, ControlFlow<B, TReturn>, UNext> {
     return new ChainFlow(
-      this.#first.tryTransformEach(fn),
+      this.#first.tryTransformEach(fn, init),
       this.#rest.map(
         fl => out =>
           'continue' in out ?
-            ControlFlow.map(fl(out.continue), f => toFlow(f).tryTransformEach(fn), ControlFlow.Continue)
+            ControlFlow.map(
+              fl(out.continue),
+              f => toFlow(f).tryTransformEach(fn, init),
+              ControlFlow.Continue,
+            )
           : { break: out },
       ),
     );
   }
 
-  override transformEach<U, UNext>(
-    fn: (cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>) => Awaitable<TNext>,
+  override transformEach<U, UNext, Init = undefined>(
+    fn: (
+      cx: ScopeContext<FlowExecutorContext<U, UNext> & { value: T }>,
+      init: Init | undefined,
+    ) => Awaitable<TNext>,
+    init?: (cx: FlowExecutorContext<U, UNext>) => Awaitable<Init>,
   ): Flow<U, TReturn, UNext> {
     return new ChainFlow(
-      this.#first.transformEach(fn),
-      this.#rest.map(fl => out => ControlFlow.map(fl(out), f => toFlow(f).transformEach(fn))),
+      this.#first.transformEach(fn, init),
+      this.#rest.map(fl => out => ControlFlow.map(fl(out), f => toFlow(f).transformEach(fn, init))),
     );
   }
 
@@ -147,6 +160,9 @@ export class ChainFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
     );
   }
 
+  override chain<U = T, UReturn = TReturn>(
+    ...flows: ToFlow<U, UReturn, TNext>[]
+  ): Flow<T | U, TReturn | UReturn, TNext>;
   override chain(...flows: ToFlow<T, TReturn, TNext>[]): Flow<T, TReturn, TNext> {
     return new ChainFlow(this.#first, this.#rest.concat(flows.map(flow => () => ({ continue: flow }))));
   }

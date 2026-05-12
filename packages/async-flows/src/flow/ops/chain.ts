@@ -41,18 +41,19 @@ export function orCatch<T, TReturn, TNext, U = T, UReturn = TReturn, E = unknown
 ): FlowTransformer<Flow<T, TReturn, TNext>, T | U, TReturn | UReturn, TNext>;
 export function orCatch<T, TReturn, TNext, U = T, UReturn = TReturn>(
   handler: (error: unknown) => ToFlow<U, UReturn, TNext>,
-  pred: AsyncPredicate<[error: unknown]>,
+  pred?: AsyncPredicate<[error: unknown]>,
 ): FlowTransformer<Flow<T, TReturn, TNext>, T | U, TReturn | UReturn, TNext>;
 export function orCatch<T, TReturn, TNext, U = T, UReturn = TReturn>(
   handler: (error: unknown) => ToFlow<U, UReturn, TNext>,
-  pred: AsyncPredicate<[error: unknown]>,
+  pred?: AsyncPredicate<[error: unknown]>,
 ): FlowTransformer<Flow<T, TReturn, TNext>, T | U, TReturn | UReturn, TNext> {
   return src =>
     defineFlow(async ({ emitAll }) => {
       try {
         return await emitAll(src);
       } catch (error) {
-        if (!(await pred(error)) || (error instanceof Error && unwrapCancellationError(error))) throw error;
+        if ((pred && !(await pred(error))) || (error instanceof Error && unwrapCancellationError(error)))
+          throw error;
 
         return await emitAll(handler(src));
       }

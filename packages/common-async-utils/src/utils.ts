@@ -102,3 +102,9 @@ interface IsArrayFunction {
  * This is an alias for {@link Array.isArray} but the types work out better for readonly arrays.
  */
 export const isArray = Array.isArray.bind(Array) as IsArrayFunction;
+
+export const NEVER_PROMISE: Promise<never> = (() => {
+  const promise = new Promise<never>(() => undefined);
+  void Object.assign(promise, { then: () => promise, catch: () => promise, finally: () => promise });
+  return promise;
+})();

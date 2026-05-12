@@ -1,15 +1,11 @@
-import {
-  defineFlow,
-  Flow,
-  FlowComplete,
-  NewItemReceived,
-  toFlow,
-  type FlowItemOf,
-  type ToFlow,
-} from '../flow.ts';
 import { isIterable, joinPromises, whenAllSettled } from '@youngspe/common-async-utils';
-import { map } from './ops/transform.ts';
 import { Scope, Token } from '@youngspe/async-scope';
+
+import { map } from '#pkg/flow/ops/transform';
+
+import { isNonDeferredFlowError } from './abstract.ts';
+import type { Flow, FlowItemOf } from './flow.ts';
+import { type ToFlow, defineFlow, toFlow } from './util.ts';
 
 export function zipFlows<
   const A extends readonly ToFlow<unknown, TReturn, TNext>[],
@@ -48,9 +44,7 @@ export function zipFlows<T, TReturn, TNext>(
 
   const _flows = Array.from(flows, toFlow);
 
-  const allRepeatable = _flows.every(f => f.repeatable);
-
-  const out: Flow<T[], TReturn, TNext> = defineFlow(async ({ scope, emitScoped }) => {
+  return defineFlow(async ({ scope, emitScoped }) => {
     const iters = Array.from(_flows, f => toFlow(f).iter({ scope }));
 
     let next: [TNext] | [] = [];
@@ -60,17 +54,7 @@ export function zipFlows<T, TReturn, TNext>(
       const scopes: Scope[] = [];
       const out = await joinPromises(
         iters,
-        (it, i): Promise<IteratorResult<{ value: T; scope: Scope }, TReturn>> => {
-          const p = it.next(...next);
-          const fl = _flows[i];
-          if (allRepeatable || !fl?.repeatable) return p;
-
-          return p.then(r => {
-            if (!r.done) return r;
-            it = iters[i] = fl.iter({ scope });
-            return it.next();
-          });
-        },
+        (it): Promise<IteratorResult<{ value: T; scope: Scope }, TReturn>> => it.next(...next),
         (result: IteratorResult<{ value: T; scope: Scope }, TReturn>, i) => {
           if (result.done) return result;
 
@@ -84,8 +68,6 @@ export function zipFlows<T, TReturn, TNext>(
       next = [await emitScoped({ value: items, scope: scopes })];
     }
   });
-
-  return allRepeatable ? Object.assign(out, { repeatable: true }) : out;
 }
 
 export function combineLatest<
@@ -125,8 +107,6 @@ export function combineLatest<T, TReturn, TNext>(
 
   const _flows = Array.from(flows, toFlow);
 
-  const allRepeatable = _flows.every(f => f.repeatable);
-
   const out: Flow<T[], TReturn, TNext> = defineFlow(async ({ emitScoped, scope }) => {
     let unsetCount = _flows.length;
     const items: Partial<Array<{ value: T; token: Token | undefined }>> = [];
@@ -153,11 +133,7 @@ export function combineLatest<T, TReturn, TNext>(
 
             if (!scope.token.isDefused) {
               const ctrl = Token.createController({
-                filter: (error: Error) => {
-                  if (error instanceof NewItemReceived) return error.deferred || 'defuse';
-                  if (error instanceof FlowComplete) return 'defuse';
-                  return true;
-                },
+                filter: (error: Error) => !isNonDeferredFlowError(error) || 'defuse',
               });
               ({ token } = ctrl);
 
@@ -249,5 +225,5 @@ export function combineLatest<T, TReturn, TNext>(
     return ret;
   });
 
-  return allRepeatable ? Object.assign(out, { repeatable: true }) : out;
+  return out;
 }

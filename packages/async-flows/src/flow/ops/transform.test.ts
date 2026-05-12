@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { useFakeTimers } from '@private/test-utils/install-fake-timers';
 
 import { defineFlow, flowOf, type ToFlow } from '@youngspe/async-flows';
-import { collectArray, flat, flatMap, map } from '@youngspe/async-flows/ops';
+import { collectArray, concatAll, concatMap, map } from '@youngspe/async-flows/ops';
 
 suite('ops', () => {
   const { clock } = useFakeTimers();
@@ -45,7 +45,7 @@ suite('ops', () => {
     });
   });
 
-  suite('flat', () => {
+  suite('concatAll', () => {
     test('simple flatten', async ({ signal }) => {
       const flow = flowOf(
         [1, 2, 3],
@@ -61,7 +61,7 @@ suite('ops', () => {
         }),
       );
 
-      const flattened = flow.to(flat());
+      const flattened = flow.to(concatAll());
 
       const expected = [1, 2, 3, 4, 5, 6, 7, 8, 9];
       const actual = await flattened.to(collectArray({ signal }));
@@ -92,7 +92,7 @@ suite('ops', () => {
         await scope.delay(100);
       });
 
-      const flattened = flow.to(flat());
+      const flattened = flow.to(concatAll());
 
       const expected = [1, 2, 3, 4, 5, 6, 7, 8, 9];
       const actual = await flattened.to(collectArray({ signal }));
@@ -102,11 +102,11 @@ suite('ops', () => {
     });
   });
 
-  suite('flatMap', () => {
+  suite('concatMap', () => {
     test('simple flat map', async ({ signal }) => {
       const flow = flowOf(0, 1, 2, 3, 4);
 
-      const flatMapped = flow.to(flatMap(x => flowOf(x * 3, x * 3 + 1, x * 3 + 2)));
+      const flatMapped = flow.to(concatMap(x => flowOf(x * 3, x * 3 + 1, x * 3 + 2)));
 
       const expected = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
       const actual = await flatMapped.to(collectArray({ signal }));

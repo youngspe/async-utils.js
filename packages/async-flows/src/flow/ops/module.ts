@@ -3,6 +3,9 @@ import type { Awaitable } from '@youngspe/async-scope-common';
 import type { AnyFlow, Flow } from '../../flow.ts';
 import type { Falsy } from '../../types.ts';
 
+/**
+ * A function that operates on a flow.
+ */
 export type FlowOperator<in A extends AnyFlow = Flow<never, never, any>, out B = unknown> = (
   this: void,
   src: A,
@@ -15,6 +18,9 @@ export type FlowTransformer<
   in UNext = never,
 > = FlowOperator<A, Flow<U, UReturn, UNext>>;
 
+/**
+ * Convenience type for a {@link FlowOperator} that does not change the type of the flow.
+ */
 export type FlowInspector<in out T, in out TReturn, in out TNext> = FlowTransformer<
   Flow<T, TReturn, TNext>,
   T,
@@ -22,11 +28,32 @@ export type FlowInspector<in out T, in out TReturn, in out TNext> = FlowTransfor
   TNext
 >;
 
+/**
+ * Convenience type for a {@link FlowOperator} that returns a promise.
+ */
 export type FlowCollector<in A extends AnyFlow = Flow<never, never, any>, out B = unknown> = FlowOperator<
   A,
   Promise<B>
 >;
 
+/**
+ * @example
+ * import assert from 'node:assert';
+ *
+ * import { pipeFlows, map, filter, collectArray } from '@youngspe/async-flows/ops';
+ * import { flowOf } from '@youngspe/async-flows';
+ *
+ * const flow = flowOf(1, 2, 3, 4, 5, 6);
+ *
+ * const out = await pipeFlows(flow, filter(x => x % 2 === 0), map(x => x * 2), collectArray());
+ *
+ * assert.deepEqual(out, [4, 8, 12]);
+ *
+ * @see {@link pipeThis}
+ * @see {@link Flow.do}
+ * @see {@link Flow#to}
+ * @see {@link Flow#pipe}
+ */
 export function pipeFlows<A extends AnyFlow>(src: A): A;
 export function pipeFlows<A extends AnyFlow, B>(src: A, opA: FlowOperator<A, B>): B;
 export function pipeFlows<A extends AnyFlow, B extends AnyFlow, C>(
@@ -109,6 +136,7 @@ export function pipeFlows(src: AnyFlow, ...ops: FlowOperator<AnyFlow, unknown>[]
   return value;
 }
 
+/** Composes multiple flow operators. */
 export function compose<A extends AnyFlow>(): FlowOperator<A, A>;
 export function compose<A extends AnyFlow, B>(opA: FlowOperator<A, B>): FlowOperator<A, B>;
 export function compose<A extends AnyFlow, B extends AnyFlow, C>(
@@ -187,6 +215,26 @@ export function compose(...ops: FlowOperator<AnyFlow, unknown>[]): unknown {
   };
 }
 
+/**
+ * Similar to {@link pipeFlows}, but the initial value is taken from the `this` argument.
+ *
+ * @example
+ * import assert from 'node:assert';
+ *
+ * import { pipeThis, map, filter, collectArray } from '@youngspe/async-flows/ops';
+ * import { flowOf } from '@youngspe/async-flows';
+ *
+ * const flow = flowOf(1, 2, 3, 4, 5, 6);
+ *
+ * const out = await pipeThis.call(flow, filter(x => x % 2 === 0), map(x => x * 2), collectArray());
+ *
+ * assert.deepEqual(out, [4, 8, 12]);
+ *
+ * @see {@link pipeFlows}
+ * @see {@link Flow.do}
+ * @see {@link Flow#to}
+ * @see {@link Flow#pipe}
+ */
 export function pipeThis<A extends AnyFlow>(this: A): A;
 export function pipeThis<A extends AnyFlow, B>(this: A, opA: FlowOperator<A, B>): B;
 export function pipeThis<A extends AnyFlow, B extends AnyFlow, C>(
@@ -273,4 +321,5 @@ export type AsyncPredicate<A extends readonly unknown[]> = (
   ...args: A
 ) => Awaitable<true | NonNullable<unknown> | Falsy>;
 
+/** Identity function. Simply returns the input. */
 export const ident = <T>(value: T): T => value;

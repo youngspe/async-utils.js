@@ -5,6 +5,7 @@ import type {
   MaybeAsyncIterator,
   MaybeAsyncIteratorResult,
 } from './types.ts';
+import type { Awaitable } from '@youngspe/async-scope-common';
 
 function flattenMaybeAsyncIteratorResult<T, TReturn>(
   result: MaybeAsyncIteratorResult<T, TReturn>,
@@ -72,12 +73,12 @@ export class ThrowAsyncIterator implements AsyncIterableIterator<never, never, u
 class EmptyAsyncIterator<TReturn> implements AsyncIterableIterator<never, TReturn, unknown> {
   readonly #value;
 
-  constructor(value: TReturn) {
+  constructor(value: Awaitable<TReturn>) {
     this.#value = value;
   }
 
-  next(): Promise<IteratorReturnResult<TReturn>> {
-    return Promise.resolve({ value: this.#value, done: true });
+  async next(): Promise<IteratorReturnResult<TReturn>> {
+    return { value: await this.#value, done: true };
   }
 
   [Symbol.asyncIterator]() {
@@ -132,10 +133,10 @@ const EMPTY: AsyncIterableIterator<never, undefined, unknown> = Object.freeze(
 
 export function emptyAsyncIterator(): AsyncIterableIterator<never, void, unknown>;
 export function emptyAsyncIterator<TReturn>(
-  returnValue: TReturn,
+  returnValue: Awaitable<TReturn>,
 ): AsyncIterableIterator<never, TReturn, unknown>;
 export function emptyAsyncIterator<TReturn>(
-  returnValue?: TReturn,
+  returnValue?: Awaitable<TReturn>,
 ): AsyncIterableIterator<never, TReturn, unknown> {
   if (returnValue === undefined) return EMPTY as AsyncIterableIterator<never, TReturn, unknown>;
   return new EmptyAsyncIterator(returnValue);

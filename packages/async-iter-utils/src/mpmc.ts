@@ -1,4 +1,4 @@
-import { isPromiseLike, type OrNever } from '@youngspe/common-async-utils';
+import { Deque, isPromiseLike, type OrNever } from '@youngspe/common-async-utils';
 import { ThrowAsyncIterator } from './utils.ts';
 import type { CancellationTokenBase } from '@youngspe/async-scope-common';
 
@@ -16,7 +16,7 @@ interface ReceiverState<T, TClose> {
   refs: number;
   ret?: TClose;
   error?: unknown;
-  buf: T[] | undefined;
+  buf: Deque<T> | undefined;
 }
 
 export abstract class Sender<in T, in TClose = void> {
@@ -255,7 +255,9 @@ export class MpmcReceiver<T, TClose> extends Receiver<T, TClose> {
 
       const { buf } = this.#receiverState;
       if (!buf) return resolve({ done: true, value: this.#receiverState.ret! });
-      if (buf.length) return resolve({ done: false, value: buf.shift()! });
+
+      const first = buf.shiftN(1);
+      if (first) return resolve({ done: false, value: first[0] });
 
       const senderState = this.#senderState;
 
@@ -298,7 +300,9 @@ export class MpmcReceiver<T, TClose> extends Receiver<T, TClose> {
     }
     const { buf } = this.#receiverState;
     if (!buf) return { done: true, value: this.#receiverState.ret! };
-    if (buf.length) return { done: false, value: buf.shift()! };
+
+    const first = buf.shiftN(1);
+    if (first) return { done: false, value: first[0] };
 
     return undefined;
   }
@@ -326,7 +330,7 @@ export class MpmcReceiver<T, TClose> extends Receiver<T, TClose> {
 
 export function channel<T, TClose = void>(): Channel<T, TClose> {
   const senderState: SenderState<T, TClose> = { refs: 1, waiters: new Map() };
-  const receiverState: ReceiverState<T, TClose> = { refs: 0, buf: undefined };
+  const receiverState: ReceiverState<T, TClose> = { refs: 0, buf: new Deque() };
 
   return {
     sender: new MpmcSender(senderState, new WeakRef(receiverState)),

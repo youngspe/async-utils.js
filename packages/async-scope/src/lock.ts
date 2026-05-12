@@ -2,24 +2,35 @@ import type { CancellableOptions } from './cancel.ts';
 import { Token } from './token.ts';
 import type { OptionalUndefinedParams } from './types.ts';
 
+/**
+ * Represents shared (i.e. read) access to a resource.
+ */
 export interface SharedGuard<out T> extends Disposable {
+  /** The value protected by the lock. */
   get value(): T;
   release(): void;
 }
 
+/**
+ * Represents unique (i.e. read-write) access to a resource.
+ */
 export interface Guard<in out T> extends SharedGuard<T> {
   set value(value: T);
 }
 
+/** A callback for either a shared (read) or unique (write) acquisition. */
 type Waiter<T> =
   | { kind: 'read'; resolve: (guard: SharedGuard<T>) => void; token: Token | undefined }
   | { kind: 'write'; resolve: (guard: Guard<T>) => void; token: Token | undefined };
 
+/** Underlying lock implementation with unchecked operations */
 class RawLock<T> {
+  /** The value protected by the lock. */
   #value: T;
   /** If positive, locked for reading. If negative, locked for writing. */
   #count = 0;
 
+  /** The queue of pending access requests. */
   #queue: Waiter<T>[] = [];
 
   constructor(value: T) {
@@ -218,24 +229,42 @@ class RawLock<T> {
   }
 }
 
+/** A simple asynchronous lock for managing current access to a resource. */
 export class Lock<T = void> {
-  #raw;
+  /** The underlying lock implementation. */
+  #raw: RawLock<T>;
+
   constructor(...[value]: OptionalUndefinedParams<[value: T]>) {
     this.#raw = new RawLock<T>(value as T);
   }
 
+  /**
+   * Waits for all pending {@linkcode Lock#acquire()} guards to be released and returns a
+   * shared guard.
+   */
   acquireShared(options?: CancellableOptions): Promise<SharedGuard<T>> {
     return this.#raw.acquireReaderAsync(options && Token.from(options));
   }
 
+  /**
+   * Waits for all pending {@linkcode Lock#acquire()} and {@linkcode Lock#acquireShared()} guards to
+   * be released a returns a unique guard.
+   */
   acquire(options?: CancellableOptions): Promise<Guard<T>> {
     return this.#raw.acquireWriterAsync(options && Token.from(options));
   }
 
+  /**
+   * If there are no active or pending {@linkcode Lock#acquire()} guards, returns a shared guard.
+   */
   tryAcquireShared(options?: CancellableOptions): SharedGuard<T> | undefined {
     return this.#raw.tryAcquireReader(options && Token.from(options));
   }
 
+  /**
+   * If there are no active or pending {@linkcode Lock#acquire()} or
+   * {@linkcode Lock#acquireShared()} guards, returns a unique guard.
+   */
   tryAcquire(options?: CancellableOptions): Guard<T> | undefined {
     return this.#raw.tryAcquireWriter(options && Token.from(options));
   }

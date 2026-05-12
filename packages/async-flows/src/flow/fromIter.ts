@@ -10,11 +10,12 @@ import {
   type ScopeContext,
   type TokenController,
 } from '@youngspe/async-scope';
-import type { Awaitable } from '@youngspe/async-scope-common';
 
-import { ControlFlow } from '../controlFlow.ts';
-import { Flow, FlowBreak, FlowComplete, NewItemReceived } from '../flow.ts';
-import { cancellableAsyncIterator } from '../iter.ts';
+import { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
+import { cancellableAsyncIterator } from '#pkg/iter';
+
+import { Flow } from './flow.ts';
+import { FlowBreak, FlowComplete, NewItemReceived } from './abstract.ts';
 
 export class FlowFromIter<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   #iter: MaybeAsyncIterableOrIterator<T, TReturn, TNext>;
@@ -27,7 +28,7 @@ export class FlowFromIter<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   }
 
   override async tryEach<B = never>(
-    handler: (cx: ScopeContext<{ value: T }>) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<TNext>>>,
+    handler: (cx: ScopeContext<{ value: T }>) => AsyncControlFlow<B, TNext>,
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, TReturn>> {
     const scope = Scope.from([this.#scope, options]);

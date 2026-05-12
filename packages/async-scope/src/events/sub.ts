@@ -1,3 +1,6 @@
+import type { CancellationTokenBase } from '@youngspe/async-scope-common';
+import type { CancellableOptions } from '../cancel.ts';
+import { Token } from '../token.ts';
 import type { Falsy } from '../types.ts';
 
 export interface SubscriptionLifecycle<Init extends any[] = [], Resume extends any[] = []> {
@@ -134,7 +137,7 @@ export abstract class Subscription {
     this.dispose();
   }
 
-  static readonly noop = Object.freeze(new (class NoopSubscription extends this {})());
+  static readonly noop: Subscription = Object.freeze(new (class NoopSubscription extends this {})());
 
   static fromDispose(this: void, dispose: (() => void) | undefined) {
     if (!dispose) return Subscription.noop;
@@ -144,15 +147,29 @@ export abstract class Subscription {
   static fromLifecycle(
     this: void,
     lifecycle:
-      | (SubscriptionLifecycle<[], [initializing: boolean]> & {
-          isActive?: ((this: void) => boolean) | undefined;
-          paused?: boolean | undefined;
-        })
+      | (SubscriptionLifecycle<[], [initializing: boolean]>
+          & CancellableOptions & {
+            isActive?: ((this: void) => boolean) | undefined;
+            paused?: boolean | undefined;
+          })
       | (() => SubscriptionLifecycle.Initialized<[initializing: boolean]>)
       | undefined,
   ): Subscription {
+    let token;
+
+    if (lifecycle && typeof lifecycle !== 'function') {
+      token = Token.from(lifecycle);
+
+      if (token.isCancelled) return Subscription.noop;
+      if (token.isDefused) {
+        token = undefined;
+      }
+    }
+
     if (!lifecycle) return Subscription.noop;
-    return new LifecycleSubscription(lifecycle);
+    const out = new LifecycleSubscription(lifecycle, token);
+
+    return out;
   }
 
   static collect(this: void, subscriptions: Iterable<Subscription | Falsy>): Subscription {
@@ -192,14 +209,17 @@ class LifecycleSubscription extends Subscription {
   #lifecycle: SubscriptionLifecycleManager<[], [first: boolean]> | undefined;
   #initialized: SubscriptionLifecycleManagerInit<[first: boolean]> | undefined;
   #isActive;
+  #onDispose: Disposable | undefined;
 
   constructor(
     lifecycle?:
-      | (SubscriptionLifecycle<[], [first: boolean]> & {
-          isActive?: ((this: void) => boolean) | undefined;
-          paused?: boolean | undefined;
-        })
+      | (SubscriptionLifecycle<[], [first: boolean]>
+          & CancellableOptions & {
+            isActive?: ((this: void) => boolean) | undefined;
+            paused?: boolean | undefined;
+          })
       | (() => SubscriptionLifecycle.Initialized<[first: boolean]> | void),
+    token?: CancellationTokenBase,
   ) {
     super();
     let paused = false;
@@ -218,6 +238,8 @@ class LifecycleSubscription extends Subscription {
     if (!paused) {
       this.#initialized?.resume(true);
     }
+
+    this.#onDispose = token?.add(this);
   }
 
   override resume(): void {
@@ -230,7 +252,9 @@ class LifecycleSubscription extends Subscription {
 
   override dispose() {
     const lifecycle = this.#lifecycle;
-    this.#lifecycle = this.#initialized = this.#isActive = undefined;
+    const onDispose = this.#onDispose;
+    this.#lifecycle = this.#initialized = this.#isActive = this.#onDispose = undefined;
+    onDispose?.[Symbol.dispose]();
     lifecycle?.dispose();
   }
 

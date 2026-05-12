@@ -1,4 +1,4 @@
-import { joinPromises } from '@youngspe/common-async-utils';
+import { isPromiseLike, joinPromises } from '@youngspe/common-async-utils';
 import type { CancellableOptions } from '../cancel.ts';
 import { Token } from '../token.ts';
 import type { OptionalUndefinedProps } from '../types.ts';
@@ -178,9 +178,24 @@ class ListenerSetImpl<T, Ret> implements ListenerSet<T, Ret> {
 
 export interface EventControllerLike<in T, out Ret = void, Async extends boolean = false> {
   readonly getListeners: (this: void) => MaybePromise<ListenerSet<T, Ret>, Async>;
+  readonly hasListeners: (this: void) => boolean;
+  readonly hasActiveListeners: (this: void) => boolean;
   readonly emitAll: (this: void, value: T) => ConditionallyAsync<undefined, Async>;
   readonly emitAllAsync: (this: void, value: T) => Promise<undefined>;
   readonly dispose: (this: void) => void;
+
+  /**
+   *
+   * If the emitter has no non-passive listeners, disposes.
+   * Otherwise, makes the emitter _transient_ so it disposes when all non-passive listeners
+   * are removed.
+   *
+   * @returns `true` if the emitter has been disposed, otherwise `false`.
+   *
+   * @see {@linkcode EventControllerLike#dispose}
+   * @see {@linkcode GenericEventEmitterParams#transient}
+   */
+  readonly softDispose: (this: void) => boolean;
   readonly isActive: (this: void) => boolean;
 }
 
@@ -208,6 +223,12 @@ export namespace GenericEventEmitterParams {
       | ((ctrl: GenericEventController<T, Ret, Async>) => Context)
       | (undefined extends Context ? undefined : never);
     isAsync: Async | (false extends Async ? undefined : never);
+    /**
+     * If `true`, the event emitter is disposed after all listeners are removed.
+     *
+     * @default `false`
+     */
+    transient?: boolean | undefined;
   }
 }
 
@@ -223,13 +244,16 @@ type GenericEventLifecycle<T, Ret, Async extends boolean, Context> = Subscriptio
 class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
   handlers: Map<EventListenerKey, Handler<T, Ret>> | undefined = new Map();
   activeCount = 0;
+  nonPassiveHandlerCount = 0;
+  transient;
 
   readonly #lifecycle;
 
   controller?: WeakRef<GenericEventController<T, Ret, Async, Context>> | undefined;
 
-  constructor(lifecycle: GenericEventLifecycle<T, Ret, Async, Context>) {
+  constructor(lifecycle: GenericEventLifecycle<T, Ret, Async, Context>, transient: boolean) {
     this.#lifecycle = new SubscriptionLifecycleManager(lifecycle);
+    this.transient = transient;
   }
 
   #getLifecycleArgs() {
@@ -244,6 +268,10 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
 
     const { paused, passive } = handler;
 
+    if (!passive) {
+      this.nonPassiveHandlerCount++;
+    }
+
     if (!passive && !paused && this.activeCount++ === 0) {
       const args = this.#getLifecycleArgs();
       if (!args) return;
@@ -255,10 +283,11 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
   }
 
   removeHandler(key: EventListenerKey): boolean {
-    if (!this.handlers) return false;
-    const handler = this.handlers.get(key);
+    const handlers = this.handlers;
+    if (!handlers) return false;
+    const handler = handlers.get(key);
     if (!handler) return false;
-    this.handlers.delete(key);
+    handlers.delete(key);
 
     const { paused, passive } = handler;
 
@@ -266,6 +295,10 @@ class GenericEventEmitterState<T, Ret, Async extends boolean, Context> {
 
     if (!passive && !paused && --this.activeCount === 0) {
       this.#lifecycle.pause();
+    }
+
+    if (!passive && --this.nonPassiveHandlerCount === 0 && this.transient) {
+      this.dispose();
     }
 
     return true;
@@ -445,9 +478,9 @@ class DefaultGenericEventEmitter<T, Ret = void> extends GenericEventEmitter<T, R
     #getContext: ((ctrl: GenericEventController<T, Ret, Async>) => Context) | undefined;
 
     constructor(params: GenericEventEmitterParams<T, Ret, Async, Context>) {
-      const { context, isAsync, ...lifecycle } = params;
+      const { context, isAsync, transient = false, ...lifecycle } = params;
       this.#isAsync = isAsync ?? (false as Async);
-      this.#state = new GenericEventEmitterState(lifecycle);
+      this.#state = new GenericEventEmitterState(lifecycle, transient);
       this.#state.controller = new WeakRef(this);
       this.emitter = new DefaultGenericEventEmitter(new WeakRef(this.#state));
       this.#getContext = context;
@@ -492,9 +525,27 @@ class DefaultGenericEventEmitter<T, Ret = void> extends GenericEventEmitter<T, R
 
       return inner();
     };
+
+    readonly hasActiveListeners = () => this.#state.activeCount > 0;
+    readonly hasListeners = () => this.#state.nonPassiveHandlerCount > 0;
+
     readonly dispose = () => this.#state.dispose();
+
+    readonly softDispose = (): boolean => {
+      const state = this.#state;
+      if (state.nonPassiveHandlerCount > 0) {
+        this.#state.transient = true;
+        return false;
+      }
+
+      this.dispose();
+      return true;
+    };
+
     readonly emitAllAsync = async (value: T) => {
-      using ls = await this.getListeners();
+      const _ls = this.getListeners();
+
+      using ls = isPromiseLike(_ls) ? await _ls : _ls;
 
       return await joinPromises(ls.listeners(), l => l(value));
     };

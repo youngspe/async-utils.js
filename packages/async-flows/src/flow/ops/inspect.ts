@@ -1,9 +1,10 @@
 import type { Awaitable } from '@youngspe/async-scope-common';
 import type { ScopeContext } from '@youngspe/async-scope';
 
-import { defineFlow } from '../../flow.ts';
-import { ident, type FlowInspector } from '../ops.ts';
-import type { Falsy } from '../../types.ts';
+import { defineFlow } from '#pkg/flow/util';
+import type { Falsy } from '#pkg/types';
+
+import { ident, type FlowInspector } from './module.ts';
 
 export const inspect = <T, TReturn, TNext>(
   onEach: ((value: T) => Awaitable<void>) | Falsy,

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.src.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ESNext", "DOM", "DOM.AsyncIterable", "DOM.Iterable"],
+    "composite": false,
+    "noEmit": true,
+  },
+  "include": ["./examples"],
+  "exclude": [],
+  "references": [{ "path": "../../internal/test-utils" }, { "path": "./tsconfig.src.json" }],
+}

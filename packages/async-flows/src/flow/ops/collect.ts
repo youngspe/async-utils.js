@@ -78,7 +78,24 @@ export function collectIf<T, X>(
     });
 }
 
+/**
+ * Observes the flow and discards all yielded values.
+ * Resolves to the return value of the flow.
+ */
 export const drain =
-  <TReturn = unknown>(): FlowCollector<Flow<unknown, TReturn, undefined>, TReturn> =>
+  <TReturn = unknown>(
+    options?: CancellableOptions,
+  ): FlowCollector<Flow<unknown, TReturn, undefined>, TReturn> =>
   src =>
-    src.each(() => undefined);
+    src.each(() => undefined, options);
+
+/**
+ * Observes the flow, feeding yielded items back as input vales.
+ * Resolves to the return value of the flow.
+ */
+export const feedback =
+  <T extends TNext, TReturn = unknown, TNext = T>(
+    options?: CancellableOptions,
+  ): FlowCollector<Flow<T, TReturn, TNext>, TReturn> =>
+  src =>
+    src.eachValue(x => x, options);

@@ -26,4 +26,20 @@ export {
   toFlowAsync,
   zipFlows,
 } from './flow.ts';
-export { type IntervalOptions, interval } from './timers.ts';
+export { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
+export {
+  createLifecycleController,
+  standardLifecycleController,
+  GenericLifecycle,
+  type LifecycleController,
+  type LifecycleControllerLike,
+  type LifecycleControllerOptions,
+  LifecycleCounter,
+  type LifecycleCounterOptions,
+  type LifecycleHandlers,
+  type StandardLifecycle,
+  type StandardLifecycleState,
+  abortedLifecycle,
+  closedLifecycle,
+} from '#pkg/lifecycle';
+export { type IntervalOptions, interval } from '#pkg/timers';

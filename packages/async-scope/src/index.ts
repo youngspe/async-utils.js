@@ -1,4 +1,11 @@
-export { Token, type TokenController, type AddCancellableOptions, type ErrorFilter } from './token.ts';
+export {
+  Token,
+  type TokenController,
+  type AddCancellableOptions,
+  type ErrorFilter,
+  CancelStack,
+  createTokenStack,
+} from './token.ts';
 export {
   Scope,
   type CommonScopeOptions,
@@ -6,6 +13,7 @@ export {
   type ScopeLaunchOptions as ScopeLaunchOptions,
   type TaskFunction,
   type ToScope,
+  ScopeStack,
 } from './scope.ts';
 export {
   cancel,

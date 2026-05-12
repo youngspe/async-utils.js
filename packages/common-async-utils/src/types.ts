@@ -3,7 +3,7 @@ export type Awaitable<T> = T | Promise<T> | PromiseLike<T>;
 export type Falsy = false | null | undefined | 0 | 0n | '';
 
 type _OptionalUndefinedParams<A extends any[], R extends any[]> =
-  { [K in keyof R]: undefined } extends R ?
+  { [K in keyof R]: R[K] | undefined } extends R ?
     A extends [...infer L, ...R] ?
       [...L, ...Partial<R>]
     : A
@@ -82,3 +82,13 @@ export type IfNever<T, Then, Else> =
  * const { value } = createState<never>();
  */
 export type OrNever<T, U = unknown> = IfNever<T, never, U>;
+
+export type Primitive = string | number | symbol | bigint | boolean | null | undefined | void;
+
+export type NotFunction<T> =
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  Exclude<T & object, Function> | (T & Primitive);
+
+export type ValueOrFunction<T, Args extends readonly unknown[] = [], T2 = T> =
+  | ((this: void, ...args: Args) => T2)
+  | NotFunction<T>;

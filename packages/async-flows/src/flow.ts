@@ -5,16 +5,19 @@ export {
   type FlowReturnOf,
   _asFlow,
   _asAsyncFlow,
-} from './flow/base.ts';
+} from './flow/flow.ts';
 export * from './flow/util.ts';
 export { FlowWithScope } from './flow/withScope.ts';
 export {
   AbstractFlow,
   type FlowExecutor,
   type FlowExecutorContext,
+  FlowError,
   FlowBreak,
   FlowComplete,
   NewItemReceived,
+  isFlowError,
+  isNonDeferredFlowError,
 } from './flow/abstract.ts';
 export { FunctionFlow } from './flow/func.ts';
 export { FlowFromIter } from './flow/fromIter.ts';
@@ -24,3 +27,6 @@ export { ChainFlow } from './flow/chain.ts';
 export { DeferredFlow } from './flow/deferred.ts';
 export { flowFromAsyncEvent, flowFromEvent } from './flow/event.ts';
 export { sharedFlow } from './flow/shared.ts';
+export { ScopedMapFlow } from './flow/map.ts';
+export { BufferedFlow } from './flow/buffered.ts';
+export { MergeFlow } from './flow/merge.ts';
