@@ -18,15 +18,15 @@
     "url": "https://youngspe.dev/"
   },
   "license": "MIT",
-  "packageManager": "pnpm@10.33.0",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "onFail": "error"
+      "onFail": "error",
+      "version": "^11.1.1"
     }
   },
   "devDependencies": {
-    "@eslint/config-helpers": "^0.5.4",
+    "@eslint/config-helpers": "^0.5.5",
     "@eslint/js": "catalog:",
     "@private/config": "workspace:^",
     "@private/test-utils": "workspace:^",

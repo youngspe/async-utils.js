@@ -1,6 +1,6 @@
 {
   "name": "@youngspe/async-scope",
-  "version": "0.1.0-dev.2",
+  "version": "0.1.0-dev.3",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
@@ -15,12 +15,12 @@
     "test": "tsgo -b tsconfig.test.json --noCheck && node --expose-gc --enable-source-maps --test \"./dist/**/*.test.js\""
   },
   "dependencies": {
-    "@youngspe/async-iter-utils": "workspace:",
-    "@youngspe/async-scope-common": "workspace:",
-    "@youngspe/common-async-utils": "workspace:"
+    "@youngspe/async-iter-utils": "workspace:^",
+    "@youngspe/async-scope-common": "workspace:^",
+    "@youngspe/common-async-utils": "workspace:^"
   },
   "devDependencies": {
-    "knip": "^6.3.0"
+    "knip": "^6.13.1"
   },
   "files": [
     "./dist",
