@@ -7,12 +7,12 @@ import {
   type LifecycleHandlers,
   type StandardLifecycle,
   type StandardLifecycleState,
-} from './lifecycle.ts';
+} from '#pkg/lifecycle';
 
 /**
  * A lifecycle that receives state updates from a {@link Flow}.
  */
-class FlowLifecycle<K extends PropertyKey, Ret> extends GenericLifecycle<K> {
+class FlowLifecycle<K extends PropertyKey, Ret> extends GenericLifecycle<K, Ret> {
   #events: Flow<LifecycleEvent<K>, Ret, undefined>;
 
   constructor(events: Flow<LifecycleEvent<K>, Ret, undefined>) {

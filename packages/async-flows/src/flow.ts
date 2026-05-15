@@ -26,7 +26,14 @@ export { zipFlows, combineLatest } from './flow/zip.ts';
 export { ChainFlow } from './flow/chain.ts';
 export { DeferredFlow } from './flow/deferred.ts';
 export { flowFromAsyncEvent, flowFromEvent } from './flow/event.ts';
-export { sharedFlow } from './flow/shared.ts';
+export {
+  sharedFlow,
+  sharedFlowController,
+  type SharedFlowController,
+  type SharedFlowControllerLike,
+  type SharedFlowControllerOptions,
+  type SharedFlowOptions,
+} from './flow/shared.ts';
 export { ScopedMapFlow } from './flow/map.ts';
 export { BufferedFlow } from './flow/buffered.ts';
 export { MergeFlow } from './flow/merge.ts';

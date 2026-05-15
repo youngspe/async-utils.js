@@ -15,16 +15,23 @@ import type {
   SetProps,
   UndefinedIfDefault,
   UpdateObject,
-} from '../types.ts';
-import { Token, STATIC_TOKEN, type TokenController } from '../token.ts';
-import { type CancellableOptions } from '../cancel.ts';
+} from '#pkg/types';
+import { Token, STATIC_TOKEN } from '#pkg/token';
+import { type CancellableOptions } from '#pkg/cancel';
+import type { CancellableLike } from '#pkg/cancel';
+import { ScopedResources } from '#pkg/scopedResource';
+import {
+  createScopeStack,
+  StandardScope,
+  type ScopeStack,
+  ContextData,
+  type ContextDataBuilder,
+} from '#pkg/scope';
+import { delay, type TimerOptions } from '#pkg/timers';
+import { CancellationError, toErrorForCancellation, unwrapCancellationError } from '#pkg/error';
+import * as resourceKeys from '#pkg/commonResources';
+
 import { scopeFrom } from './from.ts';
-import type { CancellableLike } from '../cancel.ts';
-import { ScopedResources } from '../scopedResource.ts';
-import { createScopeStack, StandardScope, type ScopeStack } from '../scope.ts';
-import { delay, type TimerOptions } from '../timers.ts';
-import { ContextData, type ContextDataBuilder } from './context.ts';
-import { CancellationError, toErrorForCancellation, unwrapCancellationError } from '../error.ts';
 
 /**
  * Function type for use in the {@linkcode Scope#launch} and {@linkcode Scope#run} family of methods
@@ -553,7 +560,8 @@ export abstract class Scope<out V extends object = object> extends ScopeBase {
    * is closed first.
    */
   delay(ms: number, options?: TimerOptions) {
-    return delay(ms, { ...options, scope: [this, options?.scope] });
+    const clock = options?.clock ?? this.resources.tryGet(resourceKeys.clock);
+    return delay(ms, { ...options, clock, scope: [this, options?.scope] });
   }
 
   /**

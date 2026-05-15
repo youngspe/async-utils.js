@@ -30,6 +30,13 @@ export abstract class GenericLifecycle<in K extends PropertyKey, out Ret = unkno
   abstract in(handlers: LifecycleHandlers<K>, options?: CancellableOptions): Promise<Ret>;
   /** Creates a flow that yields `void` when the requested state is active. */
   abstract flowIn(state: K): Flow<void, Ret, unknown>;
+  /**
+   * Calls the provided function when the requested state begins, in a scope that closes when the
+   * state ends.
+   */
+  on(state: K, handler: (cx: ScopeContext) => Awaitable<void>, options?: CancellableOptions): Promise<Ret> {
+    return this.in({ [state]: handler } as LifecycleHandlers<K>, options);
+  }
 }
 
 /** Lifecycle that is already closed or aborted. */

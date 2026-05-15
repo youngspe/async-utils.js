@@ -1,11 +1,8 @@
-import {
-  type CancellableLike,
-  type CancellableOrDisposable,
-  type CancellationListener,
-} from '../cancel.ts';
-import { Subscription } from '../events.ts';
-import { Token, type AddCancellableOptions } from '../token.ts';
-import { SafeCancellable } from '../safeCancellable.ts';
+import { type CancellableLike, type CancellableOrDisposable, type CancellationListener } from '#pkg/cancel';
+import { Subscription } from '#pkg/events';
+import { SafeCancellable } from '#pkg/safeCancellable';
+
+import { Token, type AddCancellableOptions } from './token.ts';
 
 /** Represents the current state of an {@link AggregateToken} */
 export type AggregateTokenState =

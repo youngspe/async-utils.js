@@ -1,19 +1,26 @@
 import {
   type CancellableOptions,
   CancellationError,
+  type GenericEventEmitter,
   Scope,
   type ScopeContext,
   Subscription,
   toErrorForCancellation,
+  type Token,
 } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 import { isPromiseLike } from '@youngspe/common-async-utils';
 
-import { ControlFlow } from '../controlFlow.ts';
+import { ControlFlow } from '#pkg/controlFlow';
+import {
+  sharedFlowController,
+  type SharedFlowController,
+  isNonDeferredFlowError,
+  defineFlow,
+} from '#pkg/flow';
+import { latest } from '#pkg/flow/ops/latest';
+
 import { Flow } from './flow.ts';
-import { sharedFlowController, type SharedFlowController } from './shared.ts';
-import { latest } from './ops/latest.ts';
-import { isNonDeferredFlowError } from './abstract.ts';
 
 export interface StateFlowController<in T extends TOut, out TOut = unknown> extends Disposable {
   stateFlow: StateFlow<TOut>;
@@ -155,15 +162,15 @@ class DefaultStateFlow<T> extends StateFlow<T> {
     return this.#state.value;
   }
 
-  override async tryEach<B = never>(
+  override tryEach<B = never>(
     handler: (cx: ScopeContext<{ value: T }>) => Awaitable<ControlFlow<Awaitable<B>, Awaitable<void>>>,
     options?: CancellableOptions,
   ): Promise<ControlFlow<B, never>> {
     const state = this.#state;
 
-    if (state.status === 'error') throw state.error;
+    if (state.status === 'error') return Promise.reject(state.error);
 
-    return this.#values.do(latest()).tryEach(handler, { scope: [this.#scope, options] });
+    return this.#values.tryEach(handler, options);
   }
 
   static readonly Controller = class Controller<T, K = T> implements StateFlowController<T> {
@@ -184,6 +191,8 @@ class DefaultStateFlow<T> extends StateFlow<T> {
 
       const inner = sharedFlowController<T, never>({
         scope,
+        replay: 1,
+        preserveReplay: true,
         onInit:
           onInit && (({ scope }) => onInit(scope.getContext({ values: { ...this, controller: this } }))),
         onStart: ({ scope }) => {
@@ -197,7 +206,7 @@ class DefaultStateFlow<T> extends StateFlow<T> {
 
       this.#emitter = inner;
 
-      this.stateFlow = new DefaultStateFlow(inner.flow, scope);
+      this.stateFlow = new DefaultStateFlow(inner.flow.do(latest()), scope);
     }
 
     #cancelPending() {

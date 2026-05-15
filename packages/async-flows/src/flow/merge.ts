@@ -1,8 +1,9 @@
 import { Token, type Scope, type ScopeContext } from '@youngspe/async-scope';
 import { Deque } from '@youngspe/common-async-utils';
+
+import { type Flow, type ToFlow, toFlowAsync } from '#pkg/flow';
+
 import { AbstractFlow, FlowError, type FlowExecutorContext } from './abstract.ts';
-import type { Flow } from './flow.ts';
-import { type ToFlow, toFlowAsync } from './util.ts';
 
 interface Resolvers {
   resolve: (this: void, value?: undefined) => void;

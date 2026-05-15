@@ -17,11 +17,16 @@ import type { Awaitable } from '@youngspe/async-scope-common';
 import { cancellableAsyncIterator } from '#pkg/iter';
 import type { Falsy } from '#pkg/types';
 
-import { _asAsyncFlow, _asFlow, Flow } from './flow.ts';
-import type { FlowExecutor } from './abstract.ts';
-import { FunctionFlow } from './func.ts';
-import { DeferredFlow } from './deferred.ts';
-import { FlowFromIter } from './fromIter.ts';
+import {
+  _asAsyncFlow,
+  _asFlow,
+  type FlowExecutor,
+  FunctionFlow,
+  DeferredFlow,
+  FlowFromIter,
+} from '#pkg/flow';
+
+import { Flow } from './flow.ts';
 
 /**
  * Converts the given {@link ToFlow} value to a {@link Flow}.

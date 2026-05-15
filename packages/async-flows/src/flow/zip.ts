@@ -3,9 +3,14 @@ import { Scope, Token } from '@youngspe/async-scope';
 
 import { map } from '#pkg/flow/ops/transform';
 
-import { isNonDeferredFlowError } from './abstract.ts';
-import type { Flow, FlowItemOf } from './flow.ts';
-import { type ToFlow, defineFlow, toFlow } from './util.ts';
+import {
+  type Flow,
+  type FlowItemOf,
+  isNonDeferredFlowError,
+  type ToFlow,
+  defineFlow,
+  toFlow,
+} from '#pkg/flow';
 
 export function zipFlows<
   const A extends readonly ToFlow<unknown, TReturn, TNext>[],

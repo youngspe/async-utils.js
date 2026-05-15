@@ -1,7 +1,6 @@
-import { Token } from '../token.ts';
-import { Scope } from '../scope.ts';
-import { ScopedResources } from '../scopedResource.js';
-import { ContextData } from './context.ts';
+import { Token } from '#pkg/token';
+import { Scope, ContextData } from '#pkg/scope';
+import { ScopedResources } from '#pkg/scopedResource';
 
 export class StandardScope<V extends object> extends Scope<V> {
   #resources;

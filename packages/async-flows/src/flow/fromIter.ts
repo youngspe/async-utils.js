@@ -13,9 +13,9 @@ import {
 
 import { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
 import { cancellableAsyncIterator } from '#pkg/iter';
+import { FlowBreak, FlowComplete, NewItemReceived } from '#pkg/flow';
 
 import { Flow } from './flow.ts';
-import { FlowBreak, FlowComplete, NewItemReceived } from './abstract.ts';
 
 export class FlowFromIter<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   #iter: MaybeAsyncIterableOrIterator<T, TReturn, TNext>;
@@ -52,7 +52,12 @@ export class FlowFromIter<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
         return { continue: result.value };
       }
 
-      await ctrl?.cancel(new NewItemReceived());
+      const p = ctrl?.tryCancelSync(new NewItemReceived());
+
+      if (p) {
+        await p;
+      }
+
       ctrl = Token.createController();
 
       let handlerResult;

@@ -1,8 +1,9 @@
 import type { Scope, ScopeContext } from '@youngspe/async-scope';
 import type { Awaitable } from '@youngspe/async-scope-common';
 
+import type { Flow } from '#pkg/flow';
+
 import { AbstractFlow, type FlowExecutor, type FlowExecutorContext } from './abstract.ts';
-import type { Flow } from './flow.ts';
 
 export class FunctionFlow<T, TReturn, TNext> extends AbstractFlow<T, TReturn, TNext> {
   #fn: FlowExecutor<T, TReturn, TNext> | Error;

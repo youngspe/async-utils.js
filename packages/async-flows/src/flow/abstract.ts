@@ -12,9 +12,10 @@ import {
 import type { Awaitable } from '@youngspe/async-scope-common';
 import { isPromiseLike, microtaskRepeat } from '@youngspe/common-async-utils';
 
-import { ControlFlow, type AsyncControlFlow } from '../controlFlow.ts';
+import { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
+import { toFlowAsync, type ToFlow } from '#pkg/flow';
+
 import { Flow } from './flow.ts';
-import { toFlowAsync, type ToFlow } from './util.ts';
 
 interface ContextWithFunction<T, TNext> {
   <V extends object = object>(
@@ -139,7 +140,15 @@ export abstract class AbstractFlow<T, TReturn, TNext> extends Flow<T, TReturn, T
 
       const oldCtrl = state.handlerController;
       const newCtrl = (state.handlerController = innerScope.use(
-        providedScope.use(Token.createController()),
+        providedScope.use(
+          Token.createController({
+            onAfterCancel: () => {
+              if (state.handlerController === newCtrl) {
+                state.handlerController = undefined;
+              }
+            },
+          }),
+        ),
       ));
 
       newCtrl.token.add(oldCtrl);
@@ -218,12 +227,46 @@ export abstract class AbstractFlow<T, TReturn, TNext> extends Flow<T, TReturn, T
       src: ToFlow<T, TReturn, TNext>,
       options?: CancellableOptions,
     ): Promise<TReturn | TCatch> => {
+      let oldCtrl = state.handlerController;
+
+      const newCtrl = innerScope.use(
+        Token.createController({
+          onAfterCancel: () => {
+            if (state.handlerController === newCtrl) {
+              state.handlerController = undefined;
+            }
+          },
+        }),
+      );
+
+      newCtrl.token.add(oldCtrl);
+
+      const scope = Scope.from([innerScope.replaceToken(newCtrl.token), options]);
+
       const innerFlow = await toFlowAsync(src);
 
       const out = await innerFlow.tryEach(
-        handler,
-        options ? { ...options, scope: [innerScope, options.scope] } : { scope: innerScope },
+        ({ value, scope }): AsyncControlFlow<B, TNext> => {
+          const p = oldCtrl?.tryCancelSync(new NewItemReceived());
+          if (p) {
+            return p.then<ControlFlow<Awaitable<B>, Awaitable<TNext>>>(() => {
+              oldCtrl = undefined;
+
+              const cx = scope.getContext({ values: { value }, token: newCtrl });
+              return handler(cx);
+            });
+          }
+
+          oldCtrl = undefined;
+          const cx = scope.getContext({ values: { value }, token: newCtrl });
+          return handler(cx);
+        },
+        { scope },
       );
+
+      if (state.handlerController === newCtrl) {
+        state.handlerController = oldCtrl;
+      }
 
       if ('continue' in out) return out.continue;
       state.breakout = out;

@@ -1,5 +1,5 @@
-import type { Defined, SetProps, UpdateObject } from '../types.ts';
-import type { ScopeContext, ScopeContextBase } from './scope.ts';
+import type { Defined, SetProps, UpdateObject } from '#pkg/types';
+import type { ScopeContext, ScopeContextBase } from '#pkg/scope';
 
 type Descriptors<V extends object> = {
   [K in keyof V]:

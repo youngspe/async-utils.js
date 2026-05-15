@@ -33,5 +33,6 @@ export {
   type ResourceWriteKey,
   ScopedResources,
 } from './scopedResource.ts';
+export * as resourceKeys from './commonResources.ts';
 export { Lock, type Guard, type SharedGuard } from './lock.ts';
 export { delay, type Clock, GlobalClock, type TimerOptions } from './timers.ts';

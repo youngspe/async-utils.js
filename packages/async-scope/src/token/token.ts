@@ -1,18 +1,18 @@
 import { CancellationTokenBase } from '@youngspe/async-scope-common';
+import { isIterable, type ValueOrFunction } from '@youngspe/common-async-utils';
 
-import { CancellationError, toErrorForCancellation } from '../error.ts';
-import type { CancellableLike, CancellationListener, CancellableOptions } from '../cancel.ts';
-import * as Symbols from '../symbols.ts';
-import type { Awaitable, Falsy } from '../types.ts';
-import { Subscription, type SubscriptionLifecycle } from '../events/sub.ts';
-import { CancelEvent, combineTokenSet, createTokenStack, expandTokenToSet } from '../token.ts';
+import { CancellationError, toErrorForCancellation } from '#pkg/error';
+import type { CancellableLike, CancellationListener, CancellableOptions } from '#pkg/cancel';
+import * as Symbols from '#pkg/symbols';
+import type { Awaitable, Falsy } from '#pkg/types';
+import { Subscription, type SubscriptionLifecycle } from '#pkg/events';
+import { CancelEvent, combineTokenSet, createTokenStack, expandTokenToSet } from '#pkg/token';
 import type {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Scope,
   ToScope,
-} from '../scope.ts';
-import { isIterable, type ValueOrFunction } from '@youngspe/common-async-utils';
-import { SafeCancellable } from '../safeCancellable.ts';
+} from '#pkg/scope';
+import { SafeCancellable } from '#pkg/safeCancellable';
 
 export interface AddCancellableOptions {
   paused?: boolean | undefined;

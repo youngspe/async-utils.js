@@ -1,9 +1,10 @@
 import { Deque } from '@youngspe/common-async-utils';
 import { Scope, Token, type ScopeContext, type Subscription } from '@youngspe/async-scope';
 
-import { Flow } from './flow.ts';
-import { AbstractFlow, type FlowExecutorContext, FlowError } from './abstract.ts';
+import { Flow } from '#pkg/flow';
 import { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
+
+import { AbstractFlow, type FlowExecutorContext, FlowError } from './abstract.ts';
 
 export class TryReducerFlow<
   T,

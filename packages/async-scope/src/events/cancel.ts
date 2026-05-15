@@ -1,14 +1,13 @@
 import { cascadeSync, isPromiseLike, joinPromises } from '@youngspe/common-async-utils';
 
 import { type CancellableLike, type CancellableParent, type CancellationListener } from '../cancel.ts';
-import { combineErrors, toErrorForCancellation } from '../error.ts';
-import * as Symbols from '../symbols.ts';
-import { Token, type TokenController } from '../token.ts';
-import type { Awaitable, Falsy } from '../types.ts';
+import { combineErrors, toErrorForCancellation } from '#pkg/error';
+import * as Symbols from '#pkg/symbols';
+import type { Awaitable, Falsy } from '#pkg/types';
+import { SafeCancellable } from '#pkg/safeCancellable';
+import { Token, type TokenController, type AddCancellableOptions } from '#pkg/token/token';
 import { GenericEventEmitter, type GenericEventController } from './generic.ts';
 import { Subscription } from './sub.ts';
-import type { AddCancellableOptions } from '../token/token.ts';
-import { SafeCancellable } from '../safeCancellable.ts';
 
 export class CancelEvent extends Token {
   #inner;

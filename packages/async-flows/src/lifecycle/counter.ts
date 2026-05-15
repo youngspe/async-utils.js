@@ -1,9 +1,8 @@
 import { Subscription, Token, type CancellableOptions } from '@youngspe/async-scope';
-import { type StandardLifecycle } from './lifecycle.ts';
-import { standardLifecycleController } from './controller.ts';
+import { type StandardLifecycle, standardLifecycleController } from '#pkg/lifecycle';
 
 /**
- * Options for the {@link LifecycleController} constructor.
+ * Options for the {@link LifecycleCounter} constructor.
  */
 export interface LifecycleCounterOptions extends CancellableOptions {
   /**

@@ -3,10 +3,9 @@ import type { Awaitable } from '@youngspe/async-scope-common';
 
 import type { AsyncControlFlow, ControlFlow } from '#pkg/controlFlow';
 
+import { type FlowExecutorContext, type StateFlow, type ToFlow, failedFlow, toFlow } from '#pkg/flow';
+
 import { _asAsyncFlow, _asFlow, Flow } from './flow.ts';
-import type { FlowExecutorContext } from './abstract.ts';
-import type { StateFlow } from './state.ts';
-import { type ToFlow, failedFlow, toFlow } from './util.ts';
 
 export class DeferredFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   #promise: Promise<Flow<T, TReturn, TNext>>;

@@ -1,6 +1,7 @@
 import { GlobalClock, Scope, Token, type TimerOptions, type TokenController } from '@youngspe/async-scope';
 
-import { defineFlow, Flow } from './flow.ts';
+import { defineFlow, Flow } from '#pkg/flow';
+import { resourceKeys } from '@youngspe/async-scope';
 
 export interface IntervalOptions extends TimerOptions {
   /**
@@ -33,12 +34,11 @@ export interface IntervalOptions extends TimerOptions {
 }
 
 export function interval(ms: number, options?: IntervalOptions): Flow<number, never, unknown> {
-  const {
-    clock: { setInterval, clearInterval } = GlobalClock,
-    lagQueue = true,
-    lagRecovery = 'resume',
-    skipFirst = true,
-  } = options ?? {};
+  const scope = Scope.from(options);
+
+  const { clock, lagQueue = true, lagRecovery = 'resume', skipFirst = true } = options ?? {};
+
+  const { setInterval, clearInterval } = clock ?? scope.resources.tryGet(resourceKeys.clock) ?? GlobalClock;
 
   let controller: TokenController | undefined;
 
@@ -125,6 +125,6 @@ export function interval(ms: number, options?: IntervalOptions): Flow<number, ne
           void intervalHandler();
         }
       }),
-    options,
+    { scope },
   );
 }

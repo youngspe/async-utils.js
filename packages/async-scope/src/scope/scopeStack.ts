@@ -1,6 +1,8 @@
 import type { ValueOrFunction } from '@youngspe/common-async-utils';
-import type { CancellableLike, CancellableOptions } from '../cancel.ts';
-import { DefaultCancelStack, DefusedCancelStack, STATIC_TOKEN, Token, type CancelStack } from '../token.ts';
+
+import type { CancellableLike, CancellableOptions } from '#pkg/cancel';
+import { DefaultCancelStack, DefusedCancelStack, STATIC_TOKEN, Token, type CancelStack } from '#pkg/token';
+
 import { Scope, STATIC_SCOPE, type ScopeContext, type ToScope } from './scope.ts';
 
 /**

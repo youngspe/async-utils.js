@@ -2,10 +2,9 @@ import { Scope, type CancellableOptions, type ScopeContext, type ToScope } from 
 import type { Awaitable } from '@youngspe/async-scope-common';
 
 import { ControlFlow, type AsyncControlFlow } from '#pkg/controlFlow';
+import { toFlow, type ToFlow, type FlowExecutorContext } from '#pkg/flow';
 
 import { Flow } from './flow.ts';
-import { toFlow, type ToFlow } from './util.ts';
-import type { FlowExecutorContext } from './abstract.ts';
 
 export class ChainFlow<T, TReturn, TNext> extends Flow<T, TReturn, TNext> {
   #first: Flow<T, TReturn, TNext>;

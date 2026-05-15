@@ -12,9 +12,7 @@ import { Deque, isPromiseLike } from '@youngspe/common-async-utils';
 
 import { LifecycleCounter } from '#pkg/lifecycle/counter';
 
-import { defineFlow } from './util.ts';
-import { isNonDeferredFlowError } from './abstract.ts';
-import type { Flow } from './flow.ts';
+import { type Flow, defineFlow, isNonDeferredFlowError } from '#pkg/flow';
 
 interface YieldEvent<T> {
   status: 'yield';
@@ -121,24 +119,39 @@ export interface SharedFlowController<
 class Controller<T, TReturn> implements SharedFlowController<T, TReturn> {
   #inner: GenericEventController<ItemEvent<T, TReturn>, unknown, true> | undefined;
   #closeOnTerminate;
+  #replayQueue;
+  #termRef;
+  #replaySize;
   readonly flow: Flow<T, TReturn, unknown>;
 
   constructor(
     inner: GenericEventController<ItemEvent<T, TReturn>, unknown, true>,
     lifecycleCounter: LifecycleCounter | undefined,
     replayQueue: Deque<Awaitable<T>> | undefined,
+    replaySize: number,
     termRef: { value: ReturnEvent<TReturn> | ThrowEvent | undefined },
     closeOnTerminate: boolean,
     scope: Scope | undefined,
   ) {
     this.#inner = inner;
     this.#closeOnTerminate = closeOnTerminate;
+    this.#replayQueue = replayQueue;
+    this.#replaySize = replaySize;
+    this.#termRef = termRef;
     this.flow = sharedFlowFromEvent(inner.emitter, lifecycleCounter, replayQueue, termRef, scope);
   }
 
   readonly emit = async (value: Awaitable<T>, options?: CancellableOptions): Promise<undefined> => {
-    if (isPromiseLike(value)) {
-      value = await value;
+    const inner = this.#inner;
+    if (!inner) return Promise.resolve(undefined);
+
+    const replayQueue = this.#replayQueue;
+
+    if (replayQueue) {
+      if (replayQueue.size >= this.#replaySize) {
+        void replayQueue.shift();
+      }
+      replayQueue.push(value);
     }
 
     let scope = undefined;
@@ -149,20 +162,26 @@ class Controller<T, TReturn> implements SharedFlowController<T, TReturn> {
       scope = scope.replaceToken(token);
     }
 
-    await this.#inner?.emitAll({ status: 'yield', value, scope });
+    await inner.emitAll({ status: 'yield', value, scope });
   };
 
   readonly complete = (value?: Awaitable<TReturn>): undefined => {
-    void this.#inner?.emitAll({ status: 'return', value: value! });
+    const event: ReturnEvent<TReturn> = { status: 'return', value: value! };
+    void this.#inner?.emitAll(event);
     if (this.#closeOnTerminate) {
+      this.#termRef.value = event;
       this.#inner = undefined;
     }
   };
 
   readonly fail = (error: unknown = new CancellationError()): undefined => {
-    void this.#inner?.emitAll({ status: 'throw', error });
+    this.#replayQueue?.clear();
+    const event: ThrowEvent = { status: 'throw', error };
+    void this.#inner?.emitAll(event);
 
     if (this.#closeOnTerminate) {
+      this.#termRef.value = event;
+      this.#replayQueue = undefined;
       this.#inner = undefined;
     }
   };
@@ -170,10 +189,22 @@ class Controller<T, TReturn> implements SharedFlowController<T, TReturn> {
 
 export interface SharedFlowOptions extends CancellableOptions {
   replay?: boolean | number | undefined;
+  /**
+   * - `'eager'`: Sharing begins immediately
+   * - `'lazy'`: Sharing begins the first time the flow is observed
+   * - `'whenObserved'`: Sharing begins when there is at least one observer and suspends when there are no observers.
+   */
   sharing?: 'eager' | 'lazy' | 'whenObserved' | undefined;
+  /**
+   * If {@linkcode sharing} is set to `'whenObserved'`, prevents clearing the replay buffer when
+   * sharing is suspended.
+   *
+   * @default `false``
+   */
+  preserveReplay?: boolean | undefined;
 }
 
-interface SharedFlowControllerOptions<T, TReturn> extends SharedFlowOptions {
+export interface SharedFlowControllerOptions<T, TReturn> extends SharedFlowOptions {
   onInit?:
     | ((
         cx: ScopeContext<
@@ -200,31 +231,18 @@ interface SharedFlowControllerOptions<T, TReturn> extends SharedFlowOptions {
 export const sharedFlowController = <T, TReturn>(
   options?: SharedFlowControllerOptions<T, TReturn>,
 ): SharedFlowController<T, TReturn> => {
-  const { onInit, onStart, onResume, replay = false, sharing = 'whenObserved' } = options ?? {};
+  const {
+    onInit,
+    onStart,
+    onResume,
+    replay = false,
+    sharing = 'whenObserved',
+    preserveReplay = false,
+  } = options ?? {};
   const scope = options && Scope.from(options);
   const replayQueue = replay ? new Deque<Awaitable<T>>() : undefined;
 
   const termRef: { value: ReturnEvent<TReturn> | ThrowEvent | undefined } = { value: undefined };
-
-  const onItem = (item: ItemEvent<T, TReturn>) => {
-    if (item.status === 'yield') {
-      if (replayQueue) {
-        if (typeof replay === 'number' && replayQueue.size >= replay) {
-          void replayQueue.shift();
-        }
-
-        replayQueue.push(item.value);
-      }
-
-      return;
-    }
-
-    termRef.value = item;
-
-    if (item.status === 'throw') {
-      replayQueue?.clear();
-    }
-  };
 
   let lifecycleCounter: LifecycleCounter | undefined;
 
@@ -236,7 +254,9 @@ export const sharedFlowController = <T, TReturn>(
     });
   }
 
-  const { context: ctrl, emitter } = GenericEventEmitter.createController<
+  const shouldClearReplayOnStop = !preserveReplay && sharing === 'whenObserved';
+
+  const { context: ctrl } = GenericEventEmitter.createController<
     ItemEvent<T, TReturn>,
     unknown,
     true,
@@ -244,7 +264,15 @@ export const sharedFlowController = <T, TReturn>(
   >({
     isAsync: true,
     context: ctrl =>
-      new Controller(ctrl, lifecycleCounter, replayQueue, termRef, sharing !== 'whenObserved', scope),
+      new Controller(
+        ctrl,
+        lifecycleCounter,
+        replayQueue,
+        Number(replay),
+        termRef,
+        sharing !== 'whenObserved',
+        scope,
+      ),
   });
 
   lifecycleCounter?.lifecycle
@@ -252,8 +280,7 @@ export const sharedFlowController = <T, TReturn>(
       created:
         onInit && (({ scope }) => onInit(scope.getContext({ values: { ...ctrl, controller: ctrl } }))),
       started: ({ scope }) => {
-        scope.use(emitter.add(onItem));
-        if (replayQueue) {
+        if (replayQueue && shouldClearReplayOnStop) {
           scope.token.add(() => {
             replayQueue.clear();
           });
@@ -263,7 +290,7 @@ export const sharedFlowController = <T, TReturn>(
       resumed:
         onResume && (({ scope }) => onResume(scope.getContext({ values: { ...ctrl, controller: ctrl } }))),
     })
-    .catch(() => undefined)
+    .finally(replayQueue?.clear.bind(replayQueue))
     .catch(ctrl.fail);
 
   return ctrl;

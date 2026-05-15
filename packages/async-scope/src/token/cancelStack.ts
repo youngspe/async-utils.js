@@ -1,9 +1,10 @@
 import { cascadeSync, type ValueOrFunction } from '@youngspe/common-async-utils';
-import { type CancellableLike, type CancellableOptions, type CancellationListener } from '../cancel.ts';
-import { toErrorForCancellation, unwrapCancellationError } from '../error.ts';
-import { Subscription } from '../events.ts';
-import * as Symbols from '../symbols.ts';
-import { Token, type AddCancellableOptions, type TokenController } from './token.ts';
+
+import { type CancellableLike, type CancellableOptions, type CancellationListener } from '#pkg/cancel';
+import { toErrorForCancellation, unwrapCancellationError } from '#pkg/error';
+import { Subscription } from '#pkg/events';
+import * as Symbols from '#pkg/symbols';
+import { Token, type AddCancellableOptions, type TokenController } from '#pkg/token';
 import { SafeCancellable } from '#pkg/safeCancellable';
 
 /**
